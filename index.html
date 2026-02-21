@@ -478,47 +478,47 @@ select:focus{border-color:var(--accent)}
     <div class="steps">
       <div class="step active" id="step1"><div class="sdot">1</div><span>Rewriting</span></div>
       <div class="sline"></div>
-      <div class="step" id="step2"><div class="sdot">2</div><span>Scrubbing</span></div>
+      <div class="step" id="step2"><div class="sdot">2</div><span>Edit</span></div>
       <div class="sline"></div>
-      <div class="step" id="step3"><div class="sdot">3</div><span>Done</span></div>
+      <div class="step" id="step3"><div class="sdot">3</div><span>Verify</span></div>
     </div>
 
     <div class="editor-grid">
       <div class="ecol">
         <div class="ehead">
-          <span class="elabel">AI text input</span>
+          <span class="elabel">Draft input</span>
           <span class="wc" id="inWC">0 words</span>
         </div>
-        <textarea id="inputText" placeholder="Paste your AI-generated text here..."></textarea>
+        <textarea id="inputText" placeholder="Paste your draft here..."></textarea>
       </div>
       <div class="ecol">
         <div class="ehead">
-          <span class="elabel">Humanized output</span>
+          <span class="elabel">Revised output</span>
           <span class="wc" id="outWC">0 words</span>
         </div>
-        <textarea id="outputText" readonly placeholder="Your rewritten text appears here..."></textarea>
+        <textarea id="outputText" readonly placeholder="Your revised text appears here..."></textarea>
       </div>
     </div>
 
     <div class="score-row" id="scoreRow" style="display:none">
       <div class="scard">
-        <div class="scard-label">Length match</div>
+        <div class="scard-label">Edit ratio</div>
         <div class="scard-val" id="sLen">—</div>
       </div>
       <div class="scard">
-        <div class="scard-label">Style applied</div>
+        <div class="scard-label">Specificity</div>
         <div class="scard-val" id="sStyle">—</div>
       </div>
       <div class="scard">
-        <div class="scard-label">AI words left</div>
+        <div class="scard-label">Repetition</div>
         <div class="scard-val" id="sWords">—</div>
       </div>
       <div class="scard">
-        <div class="scard-label">Burstiness</div>
+        <div class="scard-label">Sentence variance</div>
         <div class="scard-val" id="sBurst">—</div>
       </div>
       <div class="scard">
-        <div class="scard-label">Passes done</div>
+        <div class="scard-label">Voice match</div>
         <div class="scard-val" id="sPasses">—</div>
       </div>
     </div>
@@ -526,12 +526,12 @@ select:focus{border-color:var(--accent)}
     <div class="controls">
       <div class="sel-wrap">
         <select id="strength">
-          <option value="aggressive" selected>Max humanization</option>
+          <option value="aggressive" selected>Deep revision</option>
           <option value="standard">Balanced</option>
           <option value="subtle">Subtle polish</option>
         </select>
       </div>
-      <button class="btn-primary" id="runBtn" onclick="run()">Humanize →</button>
+      <button class="btn-primary" id="runBtn" onclick="run()">Revise →</button>
       <button class="btn-ghost" onclick="copyOut()">Copy output</button>
     </div>
 
@@ -561,6 +561,11 @@ select:focus{border-color:var(--accent)}
           placeholder="I just think it's weird how nobody talks about this openly. Like everyone notices it but the second you bring it up you're suddenly the problem. I had this happen with my roommate last month — I said something completely reasonable and it somehow turned into this whole thing..."></textarea>
       </div>
       <button class="btn-save" id="saveSampleBtn" onclick="saveFromSample()">Analyze &amp; Save →</button>
+      <div class="field">
+        <div class="flabel">Optional CSV reference dataset</div>
+        <div class="fhint">Upload a large CSV (even ~1 GB). The app samples slices (start/middle/end) for reference checks only. It will not replace your voice sample.</div>
+        <input type="file" id="csvFile" accept=".csv,text/csv" onchange="loadCsvReference(event)" />
+      </div>
     </div>
 
     <!-- QUIZ -->
@@ -658,8 +663,8 @@ select:focus{border-color:var(--accent)}
       </div>
       <div class="tip">
         <div class="tip-n">Tip 02</div>
-        <h3>Max mode for detectors</h3>
-        <p>Balanced mode is good for light clean-ups. Max mode completely rebuilds sentence structure and rhythm — which is what actually fools Turnitin and GPTZero. Swapping individual words alone doesn't move the score.</p>
+        <h3>Pick depth based on your draft</h3>
+        <p>Balanced mode is good for light clean-ups. Deep revision mode does more sentence-level work while preserving your facts and intent. Use it when the draft is vague, repetitive, or hard to follow.</p>
       </div>
       <div class="tip">
         <div class="tip-n">Tip 03</div>
@@ -673,18 +678,18 @@ select:focus{border-color:var(--accent)}
       </div>
       <div class="tip">
         <div class="tip-n">Tip 05</div>
-        <h3>Run it twice</h3>
-        <p>Humanize → copy output → paste it back → run on Subtle mode. The second pass introduces another layer of variation that's very difficult for detectors to flag consistently.</p>
+        <h3>Run a second pass when needed</h3>
+        <p>Revise → copy output → paste it back → run on Subtle mode. The second pass can tighten transitions and remove leftover wordiness without changing your core message.</p>
       </div>
       <div class="tip">
         <div class="tip-n">Tip 06</div>
-        <h3>Check burstiness score</h3>
-        <p>After humanizing you'll see a burstiness score. Human writing scores 0.5 or higher. If yours is below 0.4, run it again — it means sentence lengths are still too uniform, which is the top AI detection signal.</p>
+        <h3>Check rhythm and specificity metrics</h3>
+        <p>After revising you'll see edit ratio, specificity, repetition, sentence-length variance, and voice similarity. If specificity drops or voice similarity falls, revise again.</p>
       </div>
       <div class="tip">
         <div class="tip-n">Tip 07</div>
         <h3>How the datasets work</h3>
-        <p>Every run, 6 real human paragraphs and 6 real AI paragraphs are randomly selected from large built-in datasets. The model is shown both and told to write toward one, away from the other — the same principle GPTZero uses, reversed.</p>
+        <p>Every run can use optional reference examples to improve clarity and specificity checks. These references are guardrails for quality, not a target style to imitate.</p>
       </div>
       <div class="tip">
         <div class="tip-n">Tip 08</div>
@@ -703,6 +708,7 @@ select:focus{border-color:var(--accent)}
 //  STATE
 // ═══════════════════════════════════════════════════════
 let styleProfile = null;
+let csvReference = null;
 // shape: { type:'sample'|'quiz'|'raw', raw?:string, examples?:string[], summary?:string }
 
 // ═══════════════════════════════════════════════════════
@@ -1124,67 +1130,162 @@ function calcBurstiness(text) {
 //  - 8 random human paragraphs as positive examples
 //  - 8 random AI paragraphs as negative examples
 //  - Same-topic human-vs-AI contrasts for calibration
-//  - Burstiness rule built into prompt mathematically
+//  - Sentence variance rule built into prompt mathematically
 // ═══════════════════════════════════════════════════════
-async function rewriteText(apiKey, inputText, strength, styleExamples) {
-  const wordTarget = wc(inputText);
+function splitSentences(text) {
+  return (text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text]).map(s => s.trim()).filter(Boolean);
+}
 
-  const personas = {
-    aggressive: `You are a real college student who wrote this essay yourself from scratch. You're smart and you have good ideas but you write the way you actually think — directly, sometimes a bit rough, definitely not trying to impress anyone or sound academic. You rebuilt every sentence from memory without looking at the original structure. Some of your sentences are short. Some run longer than they probably should. That's fine.`,
-    standard: `You are a thoughtful person rewriting this in your own words. You write clearly but naturally — not formally, not trying to sound academic. You vary how you express things. You don't pad sentences. You don't over-explain.`,
-    subtle: `You are lightly editing this text to make it sound more natural. You adjust rhythm, soften a few stiff phrases, and break up any sentence that feels too smooth or constructed. You keep the structure mostly intact.`
+function extractNamedEntities(text) {
+  return (text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) || []).filter(w => w.length > 2);
+}
+
+function buildVoiceProfile(sample, examples = []) {
+  const base = `${sample || ''} ${examples.join(' ')}`.trim();
+  const sentences = splitSentences(base);
+  const lengths = sentences.map(s => wc(s));
+  const avg = lengths.length ? lengths.reduce((a, b) => a + b, 0) / lengths.length : 0;
+  const variance = lengths.length ? lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length : 0;
+  const transitions = ['however', 'therefore', 'furthermore', 'moreover', 'meanwhile', 'also', 'so', 'but', 'and'];
+  const transitionCount = transitions.reduce((a, t) => a + ((base.toLowerCase().match(new RegExp(`\\b${t}\\b`, 'g')) || []).length), 0);
+  const shortCount = lengths.filter(l => l < 8).length;
+  const longCount = lengths.filter(l => l > 22).length;
+
+  return {
+    avgSentenceLength: Number(avg.toFixed(1)),
+    sentenceVariance: Number((Math.sqrt(variance || 0)).toFixed(2)),
+    formalLevel: /\b(therefore|moreover|consequently|thus)\b/i.test(base) ? 'formal-leaning' : 'casual-balanced',
+    usesParentheses: /[()]/.test(base),
+    usesFragments: shortCount > 0,
+    rhetoricalQuestionRate: sentences.length ? Number((sentences.filter(st => st.endsWith('?')).length / sentences.length).toFixed(2)) : 0,
+    transitionDensity: sentences.length ? Number((transitionCount / sentences.length).toFixed(2)) : 0,
+    sentenceMix: { short: shortCount, long: longCount, total: sentences.length }
+  };
+}
+
+function computeMetrics(original, revised, voiceProfile) {
+  const originalWords = original.trim().split(/\s+/).filter(Boolean);
+  const revisedWords = revised.trim().split(/\s+/).filter(Boolean);
+  const minLen = Math.max(1, Math.min(originalWords.length, revisedWords.length));
+  let changed = Math.abs(originalWords.length - revisedWords.length);
+  for (let i = 0; i < minLen; i++) if (originalWords[i] !== revisedWords[i]) changed++;
+  const editRatio = minLen ? changed / minLen : 0;
+
+  const vagueWords = ['things', 'stuff', 'a lot', 'various', 'in many ways'];
+  const vagueCount = vagueWords.reduce((a, v) => a + ((revised.toLowerCase().match(new RegExp(v.replace(/ /g, '\\s+'), 'g')) || []).length), 0);
+  const specificityMarkers = {
+    numbers: (revised.match(/\b\d+(?:\.\d+)?\b/g) || []).length,
+    namedEntities: extractNamedEntities(revised).length,
+    concreteHints: (revised.match(/\b(example|for instance|for example|specifically|because|works by|instead of)\b/gi) || []).length
   };
 
-  const temps = { aggressive: 0.94, standard: 0.78, subtle: 0.60 };
+  const revisedSentences = splitSentences(revised);
+  const starters = revisedSentences.map(st => (st.split(/\s+/)[0] || '').toLowerCase()).filter(Boolean);
+  const starterMap = new Map();
+  starters.forEach(st => starterMap.set(st, (starterMap.get(st) || 0) + 1));
+  const repetitionScore = Array.from(starterMap.values()).filter(v => v > 1).reduce((a, b) => a + b, 0);
 
-  // Extract hard rules from BOTH quiz AND sample
+  const lengths = revisedSentences.map(st => wc(st)).filter(Boolean);
+  const avg = lengths.length ? lengths.reduce((a, b) => a + b, 0) / lengths.length : 0;
+  const variance = lengths.length ? lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length : 0;
+  const sentenceLengthVariance = avg ? Math.sqrt(variance) / avg : 0;
+
+  let voiceSimilarity = null;
+  if (voiceProfile && voiceProfile.avgSentenceLength) {
+    const lenScore = 1 - Math.min(1, Math.abs(avg - voiceProfile.avgSentenceLength) / Math.max(1, voiceProfile.avgSentenceLength));
+    const shortCount = lengths.filter(l => l < 8).length;
+    const longCount = lengths.filter(l => l > 22).length;
+    const mixScore = 1 - Math.min(1, Math.abs((shortCount + longCount) - (voiceProfile.sentenceMix.short + voiceProfile.sentenceMix.long)) / Math.max(1, voiceProfile.sentenceMix.total || 1));
+    voiceSimilarity = Number(((lenScore * 0.7) + (mixScore * 0.3)).toFixed(3));
+  }
+
+  return { editRatio: Number(editRatio.toFixed(3)), specificityMarkers, repetitionScore, sentenceLengthVariance: Number(sentenceLengthVariance.toFixed(3)), vagueCount, voiceSimilarity };
+}
+
+async function diagnoseDraft(apiKey, inputText) {
+  const system = `You are a revision diagnostician. No rewriting. Return strict JSON with keys: summary, must_preserve (array), problems (array of tags).
+Allowed problem tags: vague_claim, weak_topic_sentence, repetitive_structure, missing_example, logic_gap, awkward_transition, wordiness.
+Identify factual anchors (names, dates, numbers, quotes, citations, claims) inside must_preserve.`;
+  const user = `Draft:
+${inputText}`;
+  const raw = await callGroq(apiKey, system, user, 0.2, 700);
+  try {
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    parsed.problems = (parsed.problems || []).filter(Boolean);
+    return parsed;
+  } catch {
+    return { summary: '', must_preserve: [], problems: ['wordiness'] };
+  }
+}
+
+async function rewriteText(apiKey, inputText, strength, styleExamples, diagnosis, voiceProfile) {
   const hardRules = extractHardRules(styleProfile);
-  const hardRulesBlock = hardRules.length > 0
-    ? `\n\n━━ HARD RULES (from your writing profile — quiz + sample both analyzed) ━━\nThese rules were extracted from your quiz answers AND your writing sample independently. Both were checked. Violating any of these makes the output wrong — check against each rule before finishing:\n${hardRules.map(r => `  ▸ ${r}`).join('\n')}`
+  const wordTarget = wc(inputText);
+  const preserve = (diagnosis?.must_preserve || []).join('; ');
+  const styleBlock = styleExamples && styleExamples.length
+    ? `Voice sample sentences (authority for style):
+${styleExamples.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
     : '';
 
-  // Style examples from their own writing
-  const styleBlock = styleExamples && styleExamples.length > 0
-    ? `\n\n━━ THIS WRITER'S ACTUAL STYLE — match this precisely ━━\nThese sentences were extracted from analyzing the writer's real writing. Match their specific vocabulary, formality, rhythm, and sentence patterns exactly:\n${styleExamples.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}`
-    : '';
+  const system = `You are a revision assistant focused on clarity, specificity, and consistent voice.
+Hard rules:
+- Preserve all facts, numbers, dates, names, quotes, citations, and claims unless explicitly asked.
+- Reject thesaurus swaps and synonym-only edits.
+- Keep 70–90% of original wording for light/balanced edits.
+- Use voice_sample as the ONLY style authority. Do not blend from random corpora.
+- Do not inject slang/quirks not present in sample.
+- Implement Stage B only: edit ONLY tagged areas; keep the rest intact.
+- If draft is vague, add at least two specificity upgrades (example, number, mechanism, brief contrast).
+- Fix vague words (things, stuff, a lot, various, in many ways) with concrete detail.
+- Rhythm: include at least one short sentence (<8 words) and one longer explanatory sentence when natural.
+- Avoid stacked transitions like moreover/furthermore/therefore.
+Must preserve: ${preserve || 'all factual content from draft'}.
+Tagged problems to edit: ${(diagnosis?.problems || []).join(', ') || 'wordiness'}.
+Voice profile: ${voiceProfile ? JSON.stringify(voiceProfile) : 'none'}.
+${styleBlock}
+Optional dataset reference (quality checks only, never style authority): ${csvReference ? csvReference : 'none'}.\nOutput only revised text around ${wordTarget} words.`;
 
-  // Wider random pool + paired contrasts on identical topics
-  const humanSample = shuffleSlice(HUMAN_PARAGRAPHS, 8);
-  const aiSample = shuffleSlice(AI_PARAGRAPHS, 8);
-  const contrastSample = shuffleSlice(HUMAN_AI_CONTRASTS, 3);
+  return await callGroq(apiKey, system, `Draft:
+${inputText}`, strength === 'aggressive' ? 0.65 : strength === 'standard' ? 0.55 : 0.45, 3000);
+}
 
-  const datasetBlock = `
+async function verifyAndCorrect(apiKey, original, candidate, diagnosis, voiceProfile, styleExamples, mode='light') {
+  const originalMetrics = computeMetrics(original, original, voiceProfile);
+  let current = candidate;
+  let metrics = computeMetrics(original, current, voiceProfile);
 
-━━ REAL HUMAN WRITING — write like this ━━
-Study these real paragraphs by real humans. Notice: varied sentence lengths, natural imperfections, directness, unexpected word choices, half-formed thoughts that still make sense, opinions stated plainly, and occasional rough edges:
+  const specificityCurrent = metrics.specificityMarkers.numbers + metrics.specificityMarkers.namedEntities + metrics.specificityMarkers.concreteHints;
+  const specificityOriginal = originalMetrics.specificityMarkers.numbers + originalMetrics.specificityMarkers.namedEntities + originalMetrics.specificityMarkers.concreteHints;
 
-${humanSample.map((p, i) => `[Human example ${i + 1}]
-${p}`).join('\n\n')}
+  const failed = [];
+  if (mode === 'light' && (metrics.editRatio < 0.10 || metrics.editRatio > 0.30)) failed.push('edit_ratio');
+  if (specificityCurrent < specificityOriginal) failed.push('specificity_markers');
+  if (metrics.repetitionScore > originalMetrics.repetitionScore) failed.push('repetition_score');
+  if (voiceProfile && originalMetrics.voiceSimilarity !== null && metrics.voiceSimilarity !== null && metrics.voiceSimilarity < originalMetrics.voiceSimilarity) failed.push('voice_similarity');
 
-━━ REAL AI WRITING — never write like this ━━
-These are real AI-generated paragraphs. Your output must not resemble any of these in structure, vocabulary, rhythm, opener phrases, or tone. If any sentence you write sounds like any sentence below, rewrite it before outputting:
+  if (failed.length) {
+    const system = `Run Stage C verification and self-correction.
+Checklist must pass: Facts unchanged ✅, Specificity improved ✅, Not mostly synonyms ✅, Voice matches sample ✅.
+Failed checks: ${failed.join(', ')}.
+Use diagnosis + must_preserve to revert any factual drift and correct only needed lines.`;
+    current = await callGroq(apiKey, system, `Original:
+${original}
 
-${aiSample.map((p, i) => `[AI example ${i + 1}]
-${p}`).join('\n\n')}
+Diagnosis:
+${JSON.stringify(diagnosis)}
 
-━━ SAME TOPIC CONTRASTS — learn the difference concretely ━━
-Each pair talks about the SAME topic. The human version is what to imitate. The AI version is what to avoid. Use this to calibrate rhythm, specificity, and phrasing:
+Current revision:
+${current}
 
-${contrastSample.map((pair, i) => `[Contrast ${i + 1}: ${pair.topic}]
-Human-like: ${pair.human}
-AI-like: ${pair.ai}`).join('\n\n')}`;
+Voice profile:
+${JSON.stringify(voiceProfile)}
 
-  const system = `${personas[strength]}${hardRulesBlock}${styleBlock}${datasetBlock}
+Style sample:
+${(styleExamples || []).join('\n')}`, 0.45, 3200);
+    metrics = computeMetrics(original, current, voiceProfile);
+  }
 
-━━ UNIVERSAL RULES — all apply on every run ━━
-  ▸ Output ONLY the rewritten text. Nothing before it, nothing after it. No "Here is the rewrite:" or any preamble.
-  ▸ Preserve 100% of the original meaning — do not add, remove, or change any actual ideas
-  ▸ Stay within 10% of the original word count: target around ${wordTarget} words
-  ▸ Burstiness enforcement: for every 4 sentences, at least 1 must be under 9 words AND at least 1 must be over 22 words. This is mathematically required.
-  ▸ Do not add bullet points, numbered lists, or headers unless the original already had them
-  ▸ Never use any of these words or phrases: ${BANNED_WORDS.join(', ')}`;
-
-  return await callGroq(apiKey, system, `Rewrite this text:\n\n${inputText}`, temps[strength]);
+  return { text: current, metrics };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1197,51 +1298,7 @@ AI-like: ${pair.ai}`).join('\n\n')}`;
 //  - Low temp for precision, not creativity
 // ═══════════════════════════════════════════════════════
 async function scrubText(apiKey, text) {
-
-  // Analyze burstiness
-  const burst = calcBurstiness(text);
-  const needsBurst = burst < 0.48;
-
-  // Find AI-pattern sentence openers
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
-  const flagged = sentences.filter(s =>
-    AI_SENTENCE_OPENERS.some(p => p.test(s.trim()))
-  ).slice(0, 8);
-
-  // Build targeted instructions based on actual analysis
-  const burstNote = needsBurst
-    ? `\n\nBURSTINESS PROBLEM DETECTED (score: ${burst}, target: 0.5+): Sentence lengths are too uniform — this is the #1 AI signal that Turnitin and GPTZero both measure. You must fix this by:
-  - Breaking 2–3 medium-length sentences into very short ones (under 8 words)
-  - Expanding 1–2 sentences into longer, more flowing ones (25+ words)
-  - The variation must be dramatic and feel natural, not mechanical`
-    : `\n\nBurstiness score is acceptable (${burst}). Focus edits on word-level and phrase-level AI patterns.`;
-
-  const flagNote = flagged.length > 0
-    ? `\n\nAI-PATTERN OPENERS DETECTED — these specific sentences must be rewritten:\n${flagged.map((s, i) => `  ${i + 1}. "${s.trim()}"`).join('\n')}\nRewrite each of these so they start differently and sound like a person said them.`
-    : '';
-
-  const system = `You are an AI detection specialist who knows exactly how GPTZero and Turnitin work. You make precise surgical edits to text to fix the specific patterns that trigger detection. You do NOT rewrite whole paragraphs. You find the problems and fix them in-place.
-
-What you know about detection:
-- GPTZero measures perplexity: AI always picks the most statistically likely next word. You'll replace predictable word choices with less expected but perfectly natural alternatives.
-- GPTZero and Turnitin both measure burstiness: variation in sentence lengths. AI writes uniformly. You'll fix this structurally.
-- Turnitin's 2025 anti-humanizer update looks for: clean paragraph structure, overly smooth transitions, vocabulary that's "simple but suspiciously correct," sentences with identical subject-verb-object rhythm even with different words.
-
-Your edits (make exactly 15):
-  1–5: Replace the 5 most predictably-worded phrases with less obvious but completely natural alternatives
-  6–9: Fix sentence rhythm — break one smooth long sentence into two choppy ones; merge two short ones into a longer winding one; vary the openings of 2 sentences that open the same way
-  10–12: Remove or rewrite any sentence that reads like a topic sentence announcing what follows
-  13–14: Find 2 transitions that are too smooth ("Additionally," "This shows that," etc.) and replace with something more abrupt or conversational
-  15: Add one tiny natural imperfection somewhere — a slightly run-on clause, an aside in dashes, a sentence that starts mid-thought${burstNote}${flagNote}
-
-Output ONLY the edited text. No explanation, no list of changes, no preamble. Just the corrected text.`;
-
-  try {
-    return await callGroq(apiKey, system, `Make exactly 15 surgical edits to remove AI patterns. Output only the corrected text:\n\n${text}`, 0.65);
-  } catch (e) {
-    console.warn('Scrubber failed, returning rewrite:', e.message);
-    return text;
-  }
+  return text;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1254,7 +1311,7 @@ async function run() {
   const btn = document.getElementById('runBtn');
 
   if (!apiKey) return setStatus('Enter your Groq API key at the top.', 'err');
-  if (!inputText) return setStatus('Paste some AI text first.', 'err');
+  if (!inputText) return setStatus('Paste some draft text first.', 'err');
   if (wc(inputText) > 1400) return setStatus('Text is too long — split into chunks under 1400 words for best results.', 'err');
 
   btn.disabled = true;
@@ -1264,10 +1321,9 @@ async function run() {
 
   startProg();
   setStep(1);
-  setStatus('Pass 1 — Rewriting...', 'working');
+  setStatus('Stage A — Diagnosing draft...', 'working');
 
   try {
-    // Style extraction if we have a raw unanalyzed sample
     let styleExamples = styleProfile?.examples || null;
     if (styleProfile?.type === 'raw' && !styleProfile.examples) {
       setStatus('Analyzing your writing style first...', 'working');
@@ -1278,57 +1334,51 @@ async function run() {
         styleExamples = examples;
         updateBadge('✓ Style analyzed — ' + examples.length + ' style examples extracted');
         showExamples(examples);
-      } catch (e) { /* continue without */ }
+      } catch (e) {}
     }
 
-    // Pass 1: Rewrite
-    setStatus('Pass 1 — Rewriting with human dataset + your style...', 'working');
-    const rewritten = await rewriteText(apiKey, inputText, strength, styleExamples);
-    setProg(56);
+    const voiceProfile = styleProfile?.raw || (styleExamples && styleExamples.length)
+      ? buildVoiceProfile(styleProfile?.raw || '', styleExamples || [])
+      : null;
 
-    // Pass 2: Scrub
+    const diagnosis = await diagnoseDraft(apiKey, inputText);
+    setProg(35);
+
     setStep(2);
-    setStatus('Pass 2 — Surgical scrub: fixing perplexity & burstiness...', 'working');
-    const final = await scrubText(apiKey, rewritten);
+    setStatus('Stage B — Targeted edit...', 'working');
+    const edited = await rewriteText(apiKey, inputText, strength, styleExamples, diagnosis, voiceProfile);
+    setProg(70);
+
+    setStep(3);
+    setStatus('Stage C — Verify + self-correct...', 'working');
+    const mode = strength === 'subtle' ? 'light' : 'full';
+    const verification = await verifyAndCorrect(apiKey, inputText, edited, diagnosis, voiceProfile, styleExamples, mode);
+    const final = verification.text;
+    const metrics = verification.metrics;
     setProg(96);
 
-    // Done
     endProg();
-    setStep(3);
     document.getElementById('outputText').value = final;
+    document.getElementById('outWC').textContent = wc(final) + ' words';
 
-    const outWords = wc(final);
-    const inWords = wc(inputText);
-    document.getElementById('outWC').textContent = outWords + ' words';
+    const specificityTotal = metrics.specificityMarkers.numbers + metrics.specificityMarkers.namedEntities + metrics.specificityMarkers.concreteHints;
+    document.getElementById('sLen').textContent = `${Math.round(metrics.editRatio * 100)}%`;
+    document.getElementById('sLen').className = 'scard-val ' + (metrics.editRatio >= 0.1 && metrics.editRatio <= 0.3 ? 'g' : 'm');
 
-    // Score cards
-    const diff = Math.abs(outWords - inWords) / inWords;
-    document.getElementById('sLen').textContent = diff < 0.06 ? '✓ matched' : diff < 0.14 ? 'close' : 'off';
-    document.getElementById('sLen').className = 'scard-val ' + (diff < 0.06 ? 'g' : diff < 0.14 ? 'm' : 'b');
+    document.getElementById('sStyle').textContent = `${specificityTotal} markers`;
+    document.getElementById('sStyle').className = 'scard-val ' + (specificityTotal >= 2 ? 'g' : 'm');
 
-    const hasStyle = !!(styleExamples && styleExamples.length);
-    document.getElementById('sStyle').textContent = hasStyle ? '✓ applied' : 'none set';
-    document.getElementById('sStyle').className = 'scard-val ' + (hasStyle ? 'g' : 'm');
+    document.getElementById('sWords').textContent = `${metrics.repetitionScore}`;
+    document.getElementById('sWords').className = 'scard-val ' + (metrics.repetitionScore <= 2 ? 'g' : 'm');
 
-    const found = BANNED_WORDS.filter(w => final.toLowerCase().includes(w.toLowerCase())).length;
-    document.getElementById('sWords').textContent = found === 0 ? '✓ clean' : found + ' flagged';
-    document.getElementById('sWords').className = 'scard-val ' + (found === 0 ? 'g' : found <= 2 ? 'm' : 'b');
+    document.getElementById('sBurst').textContent = `${metrics.sentenceLengthVariance}`;
+    document.getElementById('sBurst').className = 'scard-val ' + (metrics.sentenceLengthVariance >= 0.35 ? 'g' : 'm');
 
-    const burst = calcBurstiness(final);
-    document.getElementById('sBurst').textContent = burst >= 0.5 ? '✓ ' + burst : burst >= 0.38 ? '~ ' + burst : '✗ ' + burst;
-    document.getElementById('sBurst').className = 'scard-val ' + (burst >= 0.5 ? 'g' : burst >= 0.38 ? 'm' : 'b');
-
-    document.getElementById('sPasses').textContent = '3 / 3 ✓';
-    document.getElementById('sPasses').className = 'scard-val g';
+    document.getElementById('sPasses').textContent = metrics.voiceSimilarity !== null ? `${metrics.voiceSimilarity}` : 'n/a';
+    document.getElementById('sPasses').className = 'scard-val ' + (metrics.voiceSimilarity === null || metrics.voiceSimilarity >= 0.75 ? 'g' : 'm');
 
     document.getElementById('scoreRow').style.display = 'flex';
-
-    setStatus(
-      hasStyle
-        ? 'Done. 3 passes complete — review output, make 1–2 of your own edits for best results.'
-        : 'Done. Add your writing style for even lower detection scores.',
-      'ok'
-    );
+    setStatus('Done. Diagnose → Edit → Verify complete.', 'ok');
 
   } catch (err) {
     endProg();
@@ -1357,7 +1407,7 @@ async function saveFromSample() {
 
   if (!apiKey) {
     styleProfile = { type: 'raw', raw: sample, examples: null, summary: null };
-    updateBadge('Sample saved — style analysis will run on first humanize');
+    updateBadge('Sample saved — style analysis will run on first revision');
     btn.disabled = false;
     btn.textContent = 'Analyze & Save →';
     return;
@@ -1370,7 +1420,7 @@ async function saveFromSample() {
     showExamples(examples);
   } catch (e) {
     styleProfile = { type: 'raw', raw: sample, examples: null, summary: null };
-    updateBadge('Sample saved — analysis will retry on humanize');
+    updateBadge('Sample saved — analysis will retry on next revision');
   }
 
   btn.disabled = false;
@@ -1406,6 +1456,7 @@ function saveFromQuiz() {
 
 function clearStyle() {
   styleProfile = null;
+  csvReference = null;
   updateBadge(null);
   document.getElementById('examplesBox').className = 'examples-box';
 }
@@ -1422,6 +1473,33 @@ function showExamples(examples) {
     .map(e => `<div class="ex-item">${e}</div>`)
     .join('');
   box.className = 'examples-box show';
+}
+
+async function loadCsvReference(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+
+  const readSlice = async (start, end) => {
+    const blob = file.slice(start, end);
+    return await blob.text();
+  };
+
+  const chunk = 300000;
+  const startText = await readSlice(0, Math.min(chunk, file.size));
+  const middleStart = Math.max(0, Math.floor(file.size / 2) - Math.floor(chunk / 2));
+  const midText = await readSlice(middleStart, Math.min(file.size, middleStart + chunk));
+  const endStart = Math.max(0, file.size - chunk);
+  const endText = await readSlice(endStart, file.size);
+
+  const merged = `${startText}
+${midText}
+${endText}`;
+  const lines = merged.split(/\r?\n/).filter(Boolean);
+  const sampleLines = lines.slice(0, 30).join('\n');
+  csvReference = `CSV: ${file.name}, ~${sizeMb}MB, sampled_rows:${lines.length}. Sample:
+${sampleLines.slice(0, 2400)}`;
+  updateBadge(`✓ CSV loaded (${sizeMb}MB sampled)`);
 }
 
 // ═══════════════════════════════════════════════════════
