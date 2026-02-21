@@ -634,7 +634,7 @@ select:focus{border-color:var(--accent)}
 
     <!-- Extracted examples display -->
     <div class="examples-box" id="examplesBox">
-      <div class="ex-label">Style examples extracted from your writing — the AI will write like this</div>
+      <div class="ex-label">Style examples extracted from your writing — higher variety gives better humanization</div>
       <div id="examplesContent"></div>
     </div>
 
@@ -834,6 +834,43 @@ const AI_PARAGRAPHS = [
 ];
 
 // ═══════════════════════════════════════════════════════
+//  HUMAN vs AI CONTRAST SET — same topic, different voice
+//  Used to force the model to learn concrete differences
+// ═══════════════════════════════════════════════════════
+const HUMAN_AI_CONTRASTS = [
+  {
+    topic: 'college group project',
+    human: `Our group project only started working after we stopped pretending everyone was equally invested. Two people did most of it, one person disappeared, and one person became the unofficial deadline enforcer. Not ideal, but honest. Once we admitted that was the reality, we finally got the paper done.`,
+    ai: `Collaborative academic projects can present a variety of challenges related to unequal participation and communication barriers. By establishing clear expectations, assigning responsibilities, and maintaining accountability, teams can optimize their workflow and produce stronger outcomes. Effective collaboration ultimately requires both structure and mutual commitment.`
+  },
+  {
+    topic: 'exercise habits',
+    human: `I keep trying to become a morning workout person and I keep failing by Wednesday. The plan always sounds great on Sunday night. Then Tuesday happens, I sleep through one alarm, and suddenly I'm bargaining with myself in the kitchen at 6:40 a.m. So now I just go after class and stop making it a personality test.`,
+    ai: `Developing a consistent fitness routine is essential for long-term health and well-being. Morning exercise can enhance energy levels, improve focus, and promote discipline throughout the day. However, individuals should select workout schedules that align with their lifestyle in order to sustain motivation and maximize adherence.`
+  },
+  {
+    topic: 'customer support experience',
+    human: `I spent forty minutes in a support chat to fix a billing glitch and ended up explaining the same thing to three different agents. Nobody was rude, which almost made it worse. They were all polite and all powerless. The problem got fixed eventually, but only after I typed "can someone please just look at the actual invoice" like four times.`,
+    ai: `Customer support interactions play a critical role in shaping user satisfaction and brand trust. Timely responses, clear communication, and empowered service representatives are essential components of an effective support experience. Organizations that invest in streamlined support systems are better positioned to retain customers and resolve issues efficiently.`
+  },
+  {
+    topic: 'local transit',
+    human: `The bus app says the 14 is coming in 3 minutes no matter when you check it. I have seen "3 minutes" for fifteen actual minutes. People at the stop have started treating it like a weather forecast instead of a promise. When the bus finally shows up, everyone boards with that same tired little laugh.`,
+    ai: `Public transportation systems are vital to urban mobility and economic accessibility. Reliable scheduling tools can help commuters make informed travel decisions and reduce uncertainty. When transit information is inaccurate, however, rider confidence may decline and overall service perception can be negatively affected.`
+  },
+  {
+    topic: 'studying for exams',
+    human: `I used to highlight everything and call that studying, which is basically just decorating your notes. What actually helped was doing practice questions early, getting half of them wrong, and then figuring out why. It's annoying, but at least it's real feedback instead of fake confidence.`,
+    ai: `Effective exam preparation requires intentional strategies that go beyond passive review techniques. Active recall, spaced repetition, and regular self-assessment can significantly improve knowledge retention and performance outcomes. Students who adopt evidence-based study methods are more likely to achieve academic success.`
+  },
+  {
+    topic: 'moving to a new city',
+    human: `Moving here felt exciting for about two days, then I realized I didn't know where to buy toothpaste or which train line to trust after 10 p.m. People talk about "fresh starts" like they're cinematic. Mostly it's just standing in a grocery aisle trying to decode a store layout while pretending you're not overwhelmed.`,
+    ai: `Relocating to a new city can be both exciting and challenging due to unfamiliar environments and disrupted routines. Building local knowledge, establishing social connections, and identifying essential services are key steps in easing the transition. With time and intentional effort, newcomers can develop a strong sense of belonging.`
+  }
+];
+
+// ═══════════════════════════════════════════════════════
 //  UTILITY — shuffle array and take n items
 // ═══════════════════════════════════════════════════════
 function shuffleSlice(arr, n) {
@@ -937,23 +974,23 @@ async function callGroq(apiKey, system, user, temp = 0.8, maxTokens = 4096) {
 // ═══════════════════════════════════════════════════════
 //  CALL 1 — STYLE EXTRACTOR
 //  Analyzes user's writing sample and returns
-//  6 concrete imitable example sentences in their voice
+//  8 concrete imitable example sentences in their voice
 // ═══════════════════════════════════════════════════════
 async function extractStyle(apiKey, sample) {
-  const system = `You are a writing style analyst. Study the sample and produce exactly 6 NEW sentences that capture this person's unique writing voice. These will be used as imitation targets by a rewriter.
+  const system = `You are a writing style analyst. Study the sample and produce exactly 8 NEW sentences that capture this person's unique writing voice. These will be used as imitation targets by a rewriter.
 
 Rules:
 - Write NEW sentences on any topic — do NOT copy from the sample
 - Each sentence must show their vocabulary level, formality, rhythm, contractions, sentence length pattern, and any quirks
-- Vary topics across the 6 sentences
-- Output ONLY the 6 sentences, numbered 1–6, one per line. Nothing else.`;
+- Vary topics across the 8 sentences
+- Output ONLY the 8 sentences, numbered 1–8, one per line. Nothing else.`;
 
   const result = await callGroq(apiKey, system, `Analyze and extract the style from this writing:\n\n${sample}`, 0.35, 600);
 
   return result.split('\n')
     .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim())
     .filter(l => l.length > 12)
-    .slice(0, 6);
+    .slice(0, 8);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1084,8 +1121,9 @@ function calcBurstiness(text) {
 //  Core humanization pass with:
 //  - Persona-based writing (not "sound human", BE someone)
 //  - Hard rules from quiz AND sample both enforced
-//  - 6 random human paragraphs as positive examples
-//  - 6 random AI paragraphs as negative examples
+//  - 8 random human paragraphs as positive examples
+//  - 8 random AI paragraphs as negative examples
+//  - Same-topic human-vs-AI contrasts for calibration
 //  - Burstiness rule built into prompt mathematically
 // ═══════════════════════════════════════════════════════
 async function rewriteText(apiKey, inputText, strength, styleExamples) {
@@ -1110,11 +1148,31 @@ async function rewriteText(apiKey, inputText, strength, styleExamples) {
     ? `\n\n━━ THIS WRITER'S ACTUAL STYLE — match this precisely ━━\nThese sentences were extracted from analyzing the writer's real writing. Match their specific vocabulary, formality, rhythm, and sentence patterns exactly:\n${styleExamples.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}`
     : '';
 
-  // 6 random human + 6 random AI paragraphs — changes each run
-  const humanSample = shuffleSlice(HUMAN_PARAGRAPHS, 6);
-  const aiSample = shuffleSlice(AI_PARAGRAPHS, 6);
+  // Wider random pool + paired contrasts on identical topics
+  const humanSample = shuffleSlice(HUMAN_PARAGRAPHS, 8);
+  const aiSample = shuffleSlice(AI_PARAGRAPHS, 8);
+  const contrastSample = shuffleSlice(HUMAN_AI_CONTRASTS, 3);
 
-  const datasetBlock = `\n\n━━ REAL HUMAN WRITING — write like this ━━\nStudy these real paragraphs by real humans. Notice: varied sentence lengths, natural imperfections, directness, unexpected word choices, half-formed thoughts that still make sense, opinions stated plainly, no padding:\n\n${humanSample.map((p, i) => `[Human example ${i + 1}]\n${p}`).join('\n\n')}\n\n━━ REAL AI WRITING — never write like this ━━\nThese are real AI-generated paragraphs. Your output must not resemble any of these in structure, vocabulary, rhythm, opener phrases, or tone. If any sentence you write sounds like any sentence below, rewrite it before outputting:\n\n${aiSample.map((p, i) => `[AI example ${i + 1}]\n${p}`).join('\n\n')}`;
+  const datasetBlock = `
+
+━━ REAL HUMAN WRITING — write like this ━━
+Study these real paragraphs by real humans. Notice: varied sentence lengths, natural imperfections, directness, unexpected word choices, half-formed thoughts that still make sense, opinions stated plainly, and occasional rough edges:
+
+${humanSample.map((p, i) => `[Human example ${i + 1}]
+${p}`).join('\n\n')}
+
+━━ REAL AI WRITING — never write like this ━━
+These are real AI-generated paragraphs. Your output must not resemble any of these in structure, vocabulary, rhythm, opener phrases, or tone. If any sentence you write sounds like any sentence below, rewrite it before outputting:
+
+${aiSample.map((p, i) => `[AI example ${i + 1}]
+${p}`).join('\n\n')}
+
+━━ SAME TOPIC CONTRASTS — learn the difference concretely ━━
+Each pair talks about the SAME topic. The human version is what to imitate. The AI version is what to avoid. Use this to calibrate rhythm, specificity, and phrasing:
+
+${contrastSample.map((pair, i) => `[Contrast ${i + 1}: ${pair.topic}]
+Human-like: ${pair.human}
+AI-like: ${pair.ai}`).join('\n\n')}`;
 
   const system = `${personas[strength]}${hardRulesBlock}${styleBlock}${datasetBlock}
 
@@ -1218,7 +1276,7 @@ async function run() {
         styleProfile.examples = examples;
         styleProfile.type = 'sample';
         styleExamples = examples;
-        updateBadge('✓ Style analyzed — ' + examples.length + ' examples extracted');
+        updateBadge('✓ Style analyzed — ' + examples.length + ' style examples extracted');
         showExamples(examples);
       } catch (e) { /* continue without */ }
     }
@@ -1308,7 +1366,7 @@ async function saveFromSample() {
   try {
     const examples = await extractStyle(apiKey, sample);
     styleProfile = { type: 'sample', raw: sample, examples, summary: null };
-    updateBadge('✓ Style analyzed — ' + examples.length + ' examples extracted');
+    updateBadge('✓ Style analyzed — ' + examples.length + ' style examples extracted');
     showExamples(examples);
   } catch (e) {
     styleProfile = { type: 'raw', raw: sample, examples: null, summary: null };
