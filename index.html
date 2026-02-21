@@ -297,7 +297,7 @@ select:focus{border-color:var(--accent)}
       <div class="tip"><div class="tip-n">Tip 04</div><h3>Split long texts</h3><p>Over 700 words? Split into sections and humanize each one separately. Quality drops noticeably on longer chunks.</p></div>
       <div class="tip"><div class="tip-n">Tip 05</div><h3>Run it twice</h3><p>Humanize → copy → paste back → run on Subtle mode. Two passes creates layered variation that's hard to fingerprint as any known humanizer pattern.</p></div>
       <div class="tip"><div class="tip-n">Tip 06</div><h3>Burstiness score</h3><p>Human writing scores 0.5+. Below 0.4 means sentence lengths are still too uniform — the #1 detection signal on both Turnitin and GPTZero. Run again if you see red.</p></div>
-      <div class="tip"><div class="tip-n">Tip 07</div><h3>Datasets = reversed GPTZero</h3><p>Every run pulls 8 random human paragraphs + 8 random AI paragraphs + 4 same-topic contrast pairs from a 40+40+20 library. Same methodology GPTZero used to train — applied backwards.</p></div>
+      <div class="tip"><div class="tip-n">Tip 07</div><h3>Datasets = reversed GPTZero</h3><p>Every run extracts topics from your exact text, fetches a larger topic-matched Reddit corpus, generates matched AI lookalikes, then forces alignment toward human patterns and away from AI patterns.</p></div>
       <div class="tip"><div class="tip-n">Tip 08</div><h3>Fragment injection</h3><p>The scrubber injects deliberately incomplete sentences — fragments. Real humans write fragments constantly. AI almost never does. Each fragment is a perplexity spike that detectors read as human.</p></div>
     </div>
   </div>
@@ -307,40 +307,13 @@ select:focus{border-color:var(--accent)}
 'use strict';
 
 // ════════════════════════════════════════
-//  FALLBACK DATASETS (if datasets.js fails to load)
+//  SUPPORT DATA + RUNTIME CORPUS
 // ════════════════════════════════════════
-const _HUMAN = typeof HUMAN_PARAGRAPHS !== 'undefined' ? HUMAN_PARAGRAPHS : [
-  `I changed my mind halfway through writing this paper. I started thinking the policy was straightforwardly bad, and I still think it is, but the reasons I landed on are completely different from the ones I started with. That happens more than I expected in college.`,
-  `The problem isn't that people are lazy. The incentive structure rewards looking productive over being productive. I've worked at three different companies and it's the same everywhere — meetings that could be emails, reports nobody reads. Everyone knows this. Nobody fixes it.`,
-  `I want to push back on the framing here. The question isn't whether social media causes depression — that's almost certainly too simple. The question is in whom, under what conditions, and through what mechanism.`,
-  `The honest answer is that the evidence is mixed and anyone who tells you otherwise is either wrong or selling something. The effect sizes in almost all studies are small. That doesn't mean we can't draw any conclusions — it means the conclusions should be heavily caveated.`,
-  `Darwin didn't actually invent the idea of evolution. He invented natural selection as the mechanism. What Darwin did — and this is the part that actually mattered — was provide a mechanism that didn't require a guiding intelligence. That's the part that was controversial.`
-];
+const SUBS = typeof FORCED_SUBSTITUTIONS !== 'undefined' ? FORCED_SUBSTITUTIONS : [];
+const FRAGS = typeof FRAGMENT_TEMPLATES !== 'undefined' ? FRAGMENT_TEMPLATES : [`Not the point.`, `Which is fine.`, `Worth knowing.`, `Hard to say.`, `Probably.`];
+const IMPERFS = typeof IMPERFECTION_RULES !== 'undefined' ? IMPERFECTION_RULES : [`Add one sentence that's under 5 words. Standalone.`, `Include one mild qualification like "I think" or "probably".`];
 
-const _AI = typeof AI_PARAGRAPHS !== 'undefined' ? AI_PARAGRAPHS : [
-  `The question of whether social media has a detrimental effect on mental health has become increasingly relevant in today's digitally interconnected world. This essay will explore the multifaceted nature of this relationship, considering both the potential harms and benefits associated with social media use.`,
-  `In conclusion, it is evident that this is a multifaceted issue that requires careful and nuanced consideration. The evidence presented demonstrates that simplistic solutions are unlikely to be effective, and that a more comprehensive approach is needed.`,
-  `Furthermore, it is important to consider the broader implications of these findings. Not only do they shed new light on the mechanisms through which this phenomenon operates, but they also have significant implications for policy and practice.`,
-  `There are three main reasons why this policy represents the most effective approach. First, it is based on a solid foundation of empirical evidence. Second, it is consistent with established ethical principles. Third, it is practical and implementable within existing frameworks.`,
-  `In today's rapidly evolving world, the importance of financial literacy cannot be overstated. As individuals navigate increasingly complex economic landscapes, the ability to make informed financial decisions has become a crucial life skill.`
-];
-
-const _CONTRASTS = typeof CONTRASTS !== 'undefined' ? CONTRASTS : [
-  { topic: 'thesis statement', human: `My thesis went through four versions, each one more hedged than the last, until my advisor told me to stop making it smaller and make it more specific instead. A hedged thesis is vague. A specific thesis is defensible. I had been confusing being careful with being clear.`, ai: `Developing a strong thesis statement is one of the most challenging aspects of academic writing. A good thesis should be specific, arguable, and clearly articulated. It is important to revise your thesis statement multiple times throughout the writing process.` },
-  { topic: 'procrastination', human: `I don't procrastinate because I'm lazy. I procrastinate because I'm afraid the thing I write will be bad, and as long as I haven't written it, it still might be good. That's not a time management problem. It's a different problem.`, ai: `Procrastination is a common challenge among students and can have significant negative effects on academic performance. Research suggests that procrastination is often driven by fear of failure, perfectionism, and poor self-regulation skills.` }
-];
-
-const _SUBS = typeof FORCED_SUBSTITUTIONS !== 'undefined' ? FORCED_SUBSTITUTIONS : [];
-const _FRAGS = typeof FRAGMENT_TEMPLATES !== 'undefined' ? FRAGMENT_TEMPLATES : [`Not the point.`, `Which is fine.`, `Worth knowing.`, `Hard to say.`, `Probably.`];
-const _IMPERFS = typeof IMPERFECTION_RULES !== 'undefined' ? IMPERFECTION_RULES : [`Add one sentence that's under 5 words. Standalone.`, `Include one mild qualification like "I think" or "probably".`];
-
-// Use datasets.js exports if available, else fallback
-const HP = _HUMAN;
-const AP = _AI;
-const CP = _CONTRASTS;
-const SUBS = _SUBS;
-const FRAGS = _FRAGS;
-const IMPERFS = _IMPERFS;
+let runtimeCorpusCache = null;
 
 // ════════════════════════════════════════
 //  STATE
@@ -397,6 +370,139 @@ function calcBurstiness(text) {
 function countFragments(text) {
   const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
   return sentences.filter(s => s.trim().split(/\s+/).length <= 5).length;
+}
+
+function normalizeParagraph(text) {
+  if (!text) return '';
+  const clean = text.replace(/\s+/g, ' ').trim();
+  return clean.length >= 90 ? clean : '';
+}
+
+function escapeTopic(topic) {
+  return encodeURIComponent((topic || '').trim());
+}
+
+function scoreTopicMatch(text, topics) {
+  const lower = (text || '').toLowerCase();
+  let score = 0;
+  for (const t of topics) {
+    const words = t.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    for (const w of words) {
+      if (lower.includes(w)) score += 1;
+    }
+  }
+  return score;
+}
+
+async function fetchRedditJson(url) {
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!res.ok) throw new Error('Reddit request failed: ' + res.status);
+  return await res.json();
+}
+
+async function extractTopicSeeds(apiKey, inputText) {
+  const clipped = inputText.slice(0, 2200);
+  const system = `Extract writing topics for Reddit retrieval.
+Return ONLY JSON: {"topics":["...","..."]}.
+Rules:
+- Return 5 to 7 concise topic queries.
+- Keep each query 2-5 words.
+- Queries should target the same subject matter as the input text.`;
+  const raw = await callGroq(apiKey, system, `Input text:
+
+${clipped}`, 0.15, 220);
+  try {
+    const parsed = JSON.parse(raw);
+    const topics = Array.isArray(parsed.topics) ? parsed.topics.map(t => String(t).trim()).filter(Boolean) : [];
+    if (topics.length >= 3) return topics.slice(0, 7);
+  } catch (e) {}
+
+  const words = [...new Set(clipped.toLowerCase().match(/[a-z]{4,}/g) || [])].slice(0, 6);
+  return words.length ? words.map(w => w) : ['college writing', 'study habits', 'daily life'];
+}
+
+async function fetchRedditTopicCorpus(topics, target = 48) {
+  const out = [];
+  const seen = new Set();
+
+  for (const topic of topics) {
+    const query = escapeTopic(topic);
+    const urls = [
+      `https://www.reddit.com/search.json?q=${query}&sort=top&t=year&limit=60`,
+      `https://www.reddit.com/search.json?q=${query}&sort=relevance&t=year&limit=60`
+    ];
+
+    for (const src of urls) {
+      try {
+        const json = await fetchRedditJson(src);
+        const posts = json?.data?.children || [];
+        for (const item of posts) {
+          const d = item?.data || {};
+          const pieces = [d.selftext, d.title, d.subreddit_name_prefixed ? `${d.subreddit_name_prefixed}: ${d.title || ''}` : ''];
+          for (const piece of pieces) {
+            const body = normalizeParagraph(piece || '');
+            if (!body) continue;
+            if (seen.has(body)) continue;
+            seen.add(body);
+            out.push({ text: body, score: scoreTopicMatch(body, topics) });
+            if (out.length >= target) return out;
+          }
+        }
+      } catch (e) {
+        console.warn('Reddit source skipped:', src, e.message);
+      }
+    }
+  }
+
+  return out;
+}
+
+function buildContrastPairs(human, ai, count = 6) {
+  const max = Math.min(count, human.length, ai.length);
+  const pairs = [];
+  for (let i = 0; i < max; i++) {
+    const topicWords = (human[i].split(/\s+/).slice(0, 7).join(' ') || 'reddit writing sample').replace(/[.!,;:?]+$/g, '');
+    pairs.push({ topic: topicWords, human: human[i], ai: ai[i] });
+  }
+  return pairs;
+}
+
+async function synthesizeAiCorpus(apiKey, humanExamples) {
+  const list = humanExamples.map((h, i) => `${i + 1}. ${h}`).join('\n\n');
+  const system = `You generate benchmark AI-style paragraphs for detector contrast testing.
+Return ONLY valid JSON with this shape: {"ai":["...", "..."]}.
+Rules:
+- Create exactly ${humanExamples.length} paragraphs.
+- Paragraph i must stay on the same topic as human example i.
+- Intentionally use common LLM patterns: smooth transitions, formal topic sentences, predictable phrasing.
+- Keep each paragraph 90-170 words.`;
+  const raw = await callGroq(apiKey, system, `Human examples:
+
+${list}`, 0.35, 3200);
+  try {
+    const parsed = JSON.parse(raw);
+    const ai = Array.isArray(parsed.ai) ? parsed.ai.map(t => t.trim()).filter(Boolean) : [];
+    if (ai.length >= humanExamples.length) return ai.slice(0, humanExamples.length);
+    throw new Error('Invalid AI corpus length');
+  } catch (e) {
+    throw new Error('Could not build AI comparison corpus from Reddit topics.');
+  }
+}
+
+async function getRuntimeCorpus(apiKey, inputText) {
+  if (runtimeCorpusCache) return runtimeCorpusCache;
+
+  const topics = await extractTopicSeeds(apiKey, inputText);
+  const pool = await fetchRedditTopicCorpus(topics, 56);
+  if (pool.length < 16) throw new Error('Could not fetch enough topic-matched Reddit writing samples right now. Try again in a minute.');
+
+  const sorted = [...pool].sort((a, b) => b.score - a.score);
+  const pickedHuman = sorted.slice(0, 16).map(x => x.text);
+  const ai = await synthesizeAiCorpus(apiKey, pickedHuman);
+  const contrasts = buildContrastPairs(pickedHuman, ai, 6);
+
+  runtimeCorpusCache = { topics, human: pickedHuman, ai, contrasts };
+  return runtimeCorpusCache;
 }
 
 document.getElementById('inputText').addEventListener('input', () => {
@@ -560,7 +666,7 @@ function buildImperfectionRules(imperfs, strength) {
 // ════════════════════════════════════════
 //  CALL 2 — REWRITER
 // ════════════════════════════════════════
-async function rewriteText(apiKey, inputText, strength, styleExamples) {
+async function rewriteText(apiKey, inputText, strength, styleExamples, runtime) {
   const wordTarget = wc(inputText);
 
   const personas = {
@@ -582,12 +688,34 @@ async function rewriteText(apiKey, inputText, strength, styleExamples) {
   const subRules = buildSubstitutionRules(SUBS);
   const imperfRules = buildImperfectionRules(IMPERFS, strength);
 
-  // Pick random subsets — different each run
-  const humanSample = shuffleSlice(HP, 8);
-  const aiSample = shuffleSlice(AP, 8);
-  const contrastSample = shuffleSlice(CP, 4);
+  const humanSample = runtime.human.slice(0, 12);
+  const aiSample = runtime.ai.slice(0, 12);
+  const contrastSample = runtime.contrasts;
+  const topicLine = runtime.topics && runtime.topics.length ? runtime.topics.join(', ') : "the source text";
 
-  const datasetBlock = `\n\n━━ REAL HUMAN WRITING (40 examples, 8 shown this run) — write like this ━━\nStudy these carefully. Notice: varied sentence lengths, incomplete thoughts that still make sense, opinions stated directly without hedging, imperfections, unexpected word choices, self-corrections, fragments, asides in dashes:\n\n${humanSample.map((p, i) => `[Human example ${i + 1}]\n${p}`).join('\n\n')}\n\n━━ REAL AI WRITING (40 examples, 8 shown this run) — NEVER write like this ━━\nYour output must not resemble any of these. Not in structure, not in rhythm, not in vocabulary, not in how sentences open. If any sentence you write could fit here, rewrite it:\n\n${aiSample.map((p, i) => `[AI example ${i + 1}]\n${p}`).join('\n\n')}\n\n━━ SAME-TOPIC CONTRASTS (20 pairs, 4 shown this run) — learn the exact gap ━━\nIdentical topics, one written by a human, one by AI. The difference is everything — internalize it:\n\n${contrastSample.map(c => `[Topic: ${c.topic}]\n▸ HUMAN: ${c.human}\n▸ AI: ${c.ai}`).join('\n\n')}`;
+  const datasetBlock = `
+
+━━ TOPIC TARGETS FROM YOUR INPUT ━━
+${topicLine}
+
+━━ REAL HUMAN WRITING (topic-matched Reddit JSON corpus, 12 shown this run) — write like this ━━
+Follow their unpredictability, directness, and uneven rhythm:
+
+${humanSample.map((p, i) => `[Human example ${i + 1}]
+${p}`).join('\n\n')}
+
+━━ AI LOOKALIKE WRITING (generated on those same topics, 12 shown this run) — NEVER write like this ━━
+These intentionally imitate standard AI tendencies. Keep your output far from this style:
+
+${aiSample.map((p, i) => `[AI example ${i + 1}]
+${p}`).join('\n\n')}
+
+━━ SAME-TOPIC CONTRASTS (Reddit human vs AI lookalike, 6 shown this run) ━━
+At every sentence, prefer HUMAN-like decisions and avoid AI-like phrasing:
+
+${contrastSample.map(c => `[Topic seed: ${c.topic}]
+▸ HUMAN: ${c.human}
+▸ AI: ${c.ai}`).join('\n\n')}`;
 
   const system = `${personas[strength]}${hardRulesBlock}${styleBlock}${subRules}${imperfRules}${datasetBlock}
 
@@ -600,6 +728,31 @@ async function rewriteText(apiKey, inputText, strength, styleExamples) {
   ▸ Never use any of these words: ${BANNED_WORDS.join(', ')}`;
 
   return await callGroq(apiKey, system, `Rewrite this text:\n\n${inputText}`, temps[strength]);
+}
+
+async function alignToCorpus(apiKey, text, runtime, wordTarget) {
+  const human = runtime.human.slice(0, 10);
+  const ai = runtime.ai.slice(0, 10);
+  const system = `You are a strict style calibrator.
+Goal: Make the candidate text much closer to HUMAN references and far from AI references.
+
+Return ONLY the revised text.
+Rules:
+- Preserve the exact original meaning.
+- Keep within 10% of ${wordTarget} words.
+- Borrow only STYLE signals from HUMAN references (rhythm, sentence openings, directness, imperfections).
+- Explicitly avoid AI reference patterns (predictable transitions, formal topic-sentence cadence, repetitive structure).
+- Make enough edits that the style shift is obvious.`;
+
+  const prompt = `CANDIDATE TEXT:
+${text}
+
+HUMAN REFERENCES:
+${human.map((h, i) => `${i + 1}. ${h}`).join('\n\n')}
+
+AI REFERENCES:
+${ai.map((a, i) => `${i + 1}. ${a}`).join('\n\n')}`;
+  return await callGroq(apiKey, system, prompt, 0.72);
 }
 
 // ════════════════════════════════════════
@@ -675,13 +828,14 @@ async function run() {
   if (wc(inputText) > 1400) return setStatus('Too long — split into chunks under 1400 words.', 'err');
 
   btn.disabled = true;
+  runtimeCorpusCache = null;
   document.getElementById('scoreRow').style.display = 'none';
   document.getElementById('outputText').value = '';
   document.getElementById('outWC').textContent = '0 words';
 
   startProg();
   setStep(1);
-  setStatus('Pass 1 — Rewriting with 40+40+20 dataset...', 'working');
+  setStatus('Pass 1 — Finding topics + collecting Reddit writing...', 'working');
 
   try {
     // Analyze raw sample if not yet done
@@ -698,12 +852,18 @@ async function run() {
       } catch (e) { /* continue */ }
     }
 
-    const rewritten = await rewriteText(apiKey, inputText, strength, styleExamples);
-    setProg(55);
+    const runtime = await getRuntimeCorpus(apiKey, inputText);
+    setStatus('Pass 1 — Rewriting against topic-matched human/AI corpus...', 'working');
+    const rewritten = await rewriteText(apiKey, inputText, strength, styleExamples, runtime);
+    setProg(50);
 
     setStep(2);
-    setStatus('Pass 2 — Surgical scrub: fragments + perplexity + burstiness...', 'working');
-    const final = await scrubText(apiKey, rewritten);
+    setStatus('Pass 2 — Aligning draft closer to HUMAN corpus and away from AI corpus...', 'working');
+    const aligned = await alignToCorpus(apiKey, rewritten, runtime, wc(inputText));
+    setProg(78);
+
+    setStatus('Pass 2b — Surgical scrub: fragments + perplexity + burstiness...', 'working');
+    const final = await scrubText(apiKey, aligned);
     setProg(96);
 
     endProg();
