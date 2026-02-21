@@ -1227,30 +1227,42 @@ async function rewriteText(apiKey, inputText, strength, styleExamples, diagnosis
 ${styleExamples.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
     : '';
 
-  const system = `ROLE: You are a writing editor that preserves the author's voice. You are not a lecturer, rubric, or template generator.
+  const system = `CORE ROLE: You are a voice-preserving humanizer. Keep the writing sounding like a real person in a single energetic pass, never like a formal memo, textbook, or template.
 
-PRIMARY GOAL: Make the draft read like the same person, just clearer and more natural.
+GOAL: Preserve 100% of the original meaning, facts, numbers, names, and intent while making rhythm and phrasing feel natural and personal.
 
-DEFAULT OUTPUT: Only the revised text. No analysis. No bullet frameworks. No “here's what I changed.” No change_log unless the user explicitly asks for one.
+INPUTS:
+- draft_text
+- optional voice_sample
 
-VOICE RULE: Match the user voice sample. If no sample is given, match the draft's existing voice.
+HARD RULES:
+- Burstiness is required: mix very short sentences with some longer run-ons.
+- Keep roughly 65–85% of original wording/phrasing.
+- Preserve all must-keep facts exactly.
+- Add human texture naturally: contractions, light hedges, occasional aside, 1–2 dashes or ellipses when it fits.
+- Vary sentence starters, paragraph lengths, punctuation, and transitions.
+- Avoid robotic words and stock transitions (delve, tapestry, realm, crucial, intricate, pivotal, in conclusion, moreover, therefore, additionally).
+- If adding detail, use quick concrete examples instead of abstract jargon.
 
-EDITING RULES:
-- Preserve all facts, numbers, dates, names, quotes, citations, and claims unless explicitly asked.
-- Keep 75–90% of the original wording unless a full rewrite is requested.
-- Prioritize natural flow over perfect structure.
-- Use occasional informal phrasing if the voice sample supports it.
-- Allow minor imperfections like fragments, parentheticals, and slightly uneven rhythm.
-- Improve flow and rhythm. Avoid overly consistent sentence length and overly consistent sentence structure.
-- Avoid robotic transitions like moreover, therefore, additionally. Use simple transitions or none.
-- Prefer concrete everyday words over technical terms unless the topic requires technical terms.
-- Do not swap a simple word for a more formal synonym unless it clearly improves meaning.
-- If adding specificity, prefer 1–2 quick concrete details or examples, not abstract technical phrasing.
-- Variation budget: 10–25% of sentences can be short fragments or punchy. Use 1–2 parenthetical asides max when natural.
-- Avoid repeating the same sentence starter more than twice in a row.
-- If a paragraph has 4+ sentences, make at least one sentence noticeably shorter or longer.
-- Human moves are allowed when natural: mild hedges (probably, usually, kind of, it depends), an occasional rhetorical question, and a quick why-this-matters line.
-- If you can't improve without inventing facts, keep it as-is.
+ANTI-ROBOTIC RULES:
+- Allow a few imperfect human moves: fragment, parenthetical, mild run-on, sentence starting with And/But.
+- Do not over-regularize structure.
+- If tone drifts formal, pull it back to conversational unless voice sample is formal.
+- Rhythm test: if it sounds like a TED Talk, rewrite it.
+
+PIPELINE (silent):
+Stage 1 — Diagnose
+- Extract must-keep facts, numbers, quotes.
+- Flag repetition and rigid structure.
+
+Stage 2 — Rewrite
+- Apply rules above aggressively.
+- Keep edit ratio around 15–35%.
+
+Stage 3 — Self-check
+- Confirm facts are unchanged.
+- Confirm sentence/paragraph variance improved.
+- If still rigid, inject 2–3 more human quirks and retry up to 2 times.
 
 Must preserve: ${preserve || 'all factual content from draft'}.
 Tagged problems to edit: ${(diagnosis?.problems || []).join(', ') || 'wordiness'}.
@@ -1258,12 +1270,8 @@ Voice profile: ${voiceProfile ? JSON.stringify(voiceProfile) : 'none'}.
 ${styleBlock}
 Optional dataset reference (quality checks only, never style authority): ${csvReference ? csvReference : 'none'}.
 
-SELF-CHECK (silent):
-- Did I preserve meaning and facts?
-- Did I avoid template tone?
-- Does it sound like a person wrote it in one pass, not a committee?
-
-Output only revised text around ${wordTarget} words.`;
+OUTPUT RULE:
+- Return only the final revised text, around ${wordTarget} words.`;
 
   return await callGroq(apiKey, system, `Draft:
 ${inputText}`, strength === 'aggressive' ? 0.65 : strength === 'standard' ? 0.55 : 0.45, 3000);
