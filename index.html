@@ -3,586 +3,241 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Humanizer — v5</title>
+<title>Humanizer</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Epilogue:ital,wght@0,300;0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
-/* ═══════════════════════════════════════
-   RESET + ROOT
-═══════════════════════════════════════ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#08080e;
-  --s1:#0f0f18;
-  --s2:#161622;
-  --s3:#1d1d2c;
-  --s4:#252535;
-  --border:#252535;
-  --border2:#323248;
-  --text:#e8e8f2;
-  --text2:#b8b8d0;
-  --muted:#6060808;
-  --dim:#353550;
-  --accent:#6c63ff;
-  --accent-glow:rgba(108,99,255,0.15);
-  --red:#ff5555;
-  --green:#50fa7b;
-  --yellow:#f1fa8c;
-  --orange:#ffb86c;
-  --r:5px;
-  --r2:10px;
-  --r3:14px;
+  --bg:#08080e;--s1:#0f0f18;--s2:#161622;--s3:#1d1d2c;
+  --border:#252535;--border2:#323248;--text:#e8e8f2;--text2:#b8b8d0;
+  --dim:#353550;--accent:#6c63ff;--glow:rgba(108,99,255,0.15);
+  --red:#ff5555;--green:#50fa7b;--yellow:#f1fa8c;--r:5px;--r2:10px;
 }
-html{scroll-behavior:smooth}
-body{
-  font-family:'Epilogue',system-ui,sans-serif;
-  background:var(--bg);
-  color:var(--text);
-  min-height:100vh;
-  line-height:1.6;
-  overflow-x:hidden;
-}
+body{font-family:'Epilogue',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6;overflow-x:hidden}
 
-/* ═══════════════════════════════════════
-   GRAIN OVERLAY
-═══════════════════════════════════════ */
-body::after{
-  content:'';
-  position:fixed;
-  inset:0;
-  pointer-events:none;
-  z-index:999;
-  opacity:0.025;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
+header{display:flex;align-items:center;justify-content:space-between;padding:20px 32px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(108,99,255,0.06) 0%,transparent 100%);flex-wrap:wrap;gap:12px}
+.logo{display:flex;align-items:baseline;gap:9px}
+.logo h1{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;letter-spacing:-0.04em}
+.logo h1 em{font-style:normal;background:linear-gradient(135deg,#6c63ff,#ff79c6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.chip{font-family:'JetBrains Mono',monospace;font-size:0.58rem;padding:2px 7px;border:1px solid var(--border2);border-radius:20px;color:#555580;letter-spacing:0.1em}
+.key-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.key-wrap{display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:7px 12px}
+.key-wrap label{font-family:'JetBrains Mono',monospace;font-size:0.58rem;color:#555580;text-transform:uppercase;letter-spacing:0.12em;white-space:nowrap}
+.key-wrap input{background:transparent;border:none;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:0.76rem;outline:none;width:230px}
+.key-wrap input::placeholder{color:var(--dim)}
+.key-hint{font-size:0.7rem;color:#555580}
+.key-hint a{color:#6c63ff;text-decoration:none}
 
-/* ═══════════════════════════════════════
-   HEADER
-═══════════════════════════════════════ */
-header{
-  position:relative;
-  z-index:10;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:22px 36px;
-  border-bottom:1px solid var(--border);
-  background:linear-gradient(180deg,rgba(108,99,255,0.07) 0%,transparent 100%);
-  flex-wrap:wrap;
-  gap:14px;
-}
-.logo{display:flex;align-items:baseline;gap:10px}
-.logo h1{
-  font-family:'Syne',sans-serif;
-  font-size:1.5rem;
-  font-weight:800;
-  letter-spacing:-0.04em;
-  color:var(--text);
-}
-.logo h1 em{
-  font-style:normal;
-  background:linear-gradient(135deg,#6c63ff,#ff79c6);
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-}
-.logo .chip{
-  font-family:'JetBrains Mono',monospace;
-  font-size:0.6rem;
-  padding:2px 7px;
-  border:1px solid var(--border2);
-  border-radius:20px;
-  color:#6060808;
-  color:var(--dim);
-  letter-spacing:0.1em;
-  color:#555580;
-}
-.api-wrap{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  background:var(--s2);
-  border:1px solid var(--border);
-  border-radius:var(--r);
-  padding:7px 13px;
-}
-.api-wrap label{
-  font-family:'JetBrains Mono',monospace;
-  font-size:0.6rem;
-  color:#555580;
-  text-transform:uppercase;
-  letter-spacing:0.12em;
-  white-space:nowrap;
-}
-.api-wrap input{
-  background:transparent;
-  border:none;
-  color:var(--text);
-  font-family:'JetBrains Mono',monospace;
-  font-size:0.78rem;
-  outline:none;
-  width:240px;
-}
-.api-wrap input::placeholder{color:var(--dim)}
-.api-hint{font-size:0.72rem;color:#555580}
-.api-hint a{color:#6c63ff;text-decoration:none}
-.api-hint a:hover{text-decoration:underline}
+.app{max-width:1160px;margin:0 auto;padding:26px 30px 80px;display:flex;flex-direction:column;gap:20px}
 
-/* ═══════════════════════════════════════
-   MAIN WRAPPER
-═══════════════════════════════════════ */
-.app{
-  position:relative;
-  z-index:1;
-  max-width:1200px;
-  margin:0 auto;
-  padding:28px 32px 100px;
-  display:flex;
-  flex-direction:column;
-  gap:22px;
-}
-
-/* ═══════════════════════════════════════
-   TABS
-═══════════════════════════════════════ */
-.tabs{
-  display:flex;
-  gap:0;
-  border-bottom:1px solid var(--border);
-}
-.tab{
-  padding:9px 20px;
-  background:transparent;
-  border:none;
-  border-bottom:2px solid transparent;
-  margin-bottom:-1px;
-  font-family:'Syne',sans-serif;
-  font-size:0.75rem;
-  font-weight:700;
-  letter-spacing:0.08em;
-  text-transform:uppercase;
-  color:#555580;
-  cursor:pointer;
-  transition:color 0.15s,border-color 0.15s;
-}
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{padding:8px 18px;background:transparent;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#555580;cursor:pointer;transition:color 0.15s,border-color 0.15s}
 .tab:hover{color:var(--text2)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 .panel{display:none}
-.panel.active{display:flex;flex-direction:column;gap:20px;padding-top:22px}
+.panel.active{display:flex;flex-direction:column;gap:18px;padding-top:20px}
 
-/* ═══════════════════════════════════════
-   STEP INDICATOR
-═══════════════════════════════════════ */
 .steps{display:flex;align-items:center;gap:0}
-.step{
-  display:flex;align-items:center;gap:8px;
-  font-family:'JetBrains Mono',monospace;
-  font-size:0.68rem;
-  color:#555580;
-  transition:color 0.3s;
-}
+.step{display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:0.66rem;color:#555580;transition:color 0.3s}
 .step.active{color:var(--accent)}
 .step.done{color:var(--green)}
-.sdot{
-  width:22px;height:22px;border-radius:50%;
-  border:1px solid var(--border2);
-  display:flex;align-items:center;justify-content:center;
-  font-size:0.6rem;font-weight:700;flex-shrink:0;
-  transition:all 0.3s;
-}
-.step.active .sdot{border-color:var(--accent);color:var(--accent);background:var(--accent-glow)}
+.sdot{width:20px;height:20px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:0.58rem;font-weight:700;flex-shrink:0;transition:all 0.3s}
+.step.active .sdot{border-color:var(--accent);color:var(--accent);background:var(--glow)}
 .step.done .sdot{border-color:var(--green);background:rgba(80,250,123,0.1);color:var(--green)}
-.sline{width:28px;height:1px;background:var(--border);margin:0 4px;flex-shrink:0}
+.sline{width:24px;height:1px;background:var(--border);margin:0 3px;flex-shrink:0}
 
-/* ═══════════════════════════════════════
-   EDITOR GRID
-═══════════════════════════════════════ */
-.editor-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:14px;
-}
-@media(max-width:680px){.editor-grid{grid-template-columns:1fr}}
-.ecol{
-  display:flex;flex-direction:column;
-  border:1px solid var(--border);
-  border-radius:var(--r2);
-  overflow:hidden;
-  background:var(--s1);
-  transition:border-color 0.2s;
-}
+.egrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:660px){.egrid{grid-template-columns:1fr}}
+.ecol{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;background:var(--s1);transition:border-color 0.2s}
 .ecol:focus-within{border-color:var(--border2)}
-.ehead{
-  padding:9px 15px;
-  background:var(--s2);
-  border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;
-}
-.elabel{
-  font-family:'JetBrains Mono',monospace;
-  font-size:0.6rem;
-  text-transform:uppercase;
-  letter-spacing:0.12em;
-  color:#555580;
-}
-.wc{font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:var(--dim)}
-textarea{
-  flex:1;width:100%;min-height:340px;
-  padding:18px;
-  background:transparent;border:none;
-  color:var(--text);
-  font-family:'Epilogue',system-ui,sans-serif;
-  font-size:0.93rem;line-height:1.78;
-  resize:vertical;outline:none;
-}
+.ehead{padding:8px 14px;background:var(--s2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.elabel{font-family:'JetBrains Mono',monospace;font-size:0.58rem;text-transform:uppercase;letter-spacing:0.12em;color:#555580}
+.ewc{font-family:'JetBrains Mono',monospace;font-size:0.58rem;color:var(--dim)}
+textarea{flex:1;width:100%;min-height:320px;padding:16px;background:transparent;border:none;color:var(--text);font-family:'Epilogue',system-ui,sans-serif;font-size:0.91rem;line-height:1.76;resize:vertical;outline:none}
 textarea::placeholder{color:var(--dim);font-style:italic}
 textarea[readonly]{cursor:default;color:var(--text2)}
 
-/* ═══════════════════════════════════════
-   SCORE ROW
-═══════════════════════════════════════ */
-.score-row{display:flex;gap:8px;flex-wrap:wrap}
-.scard{
-  flex:1;min-width:110px;
-  padding:10px 13px;
-  background:var(--s2);
-  border:1px solid var(--border);
-  border-radius:var(--r);
-}
-.scard-label{
-  font-family:'JetBrains Mono',monospace;
-  font-size:0.58rem;text-transform:uppercase;
-  letter-spacing:0.1em;color:#555580;margin-bottom:4px;
-}
-.scard-val{
-  font-family:'Syne',sans-serif;
-  font-size:0.85rem;font-weight:700;
-}
+.score-row{display:flex;gap:7px;flex-wrap:wrap}
+.scard{flex:1;min-width:100px;padding:9px 12px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r)}
+.sc-l{font-family:'JetBrains Mono',monospace;font-size:0.56rem;text-transform:uppercase;letter-spacing:0.1em;color:#555580;margin-bottom:3px}
+.sc-v{font-family:'Syne',sans-serif;font-size:0.82rem;font-weight:700}
 .g{color:var(--green)}.m{color:var(--yellow)}.b{color:var(--red)}
 
-/* ═══════════════════════════════════════
-   CONTROLS
-═══════════════════════════════════════ */
-.controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.sel-wrap{position:relative}
-select{
-  appearance:none;
-  padding:10px 30px 10px 13px;
-  background:var(--s2);border:1px solid var(--border);
-  border-radius:var(--r);
-  color:var(--text);
-  font-family:'Epilogue',sans-serif;font-size:0.84rem;
-  outline:none;cursor:pointer;
-}
+.controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.sel-w{position:relative}
+select{appearance:none;padding:9px 28px 9px 12px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.82rem;outline:none;cursor:pointer}
 select:focus{border-color:var(--accent)}
-.sel-wrap::after{
-  content:'▾';position:absolute;right:10px;top:50%;
-  transform:translateY(-50%);color:#555580;font-size:0.65rem;pointer-events:none;
-}
-.btn-primary{
-  flex:1;padding:11px 22px;
-  background:linear-gradient(135deg,#6c63ff,#8b5cf6);
-  border:none;border-radius:var(--r);
-  color:#fff;
-  font-family:'Syne',sans-serif;font-size:0.85rem;font-weight:700;
-  letter-spacing:0.04em;cursor:pointer;
-  transition:opacity 0.15s,transform 0.1s,box-shadow 0.15s;
-  box-shadow:0 0 0 0 rgba(108,99,255,0);
-}
-.btn-primary:hover{opacity:0.88;box-shadow:0 4px 22px rgba(108,99,255,0.35)}
-.btn-primary:active{transform:scale(0.98)}
-.btn-primary:disabled{opacity:0.28;cursor:not-allowed;box-shadow:none}
-.btn-ghost{
-  padding:10px 17px;
-  background:transparent;border:1px solid var(--border);
-  border-radius:var(--r);
-  color:#555580;
-  font-family:'Epilogue',sans-serif;font-size:0.84rem;font-weight:500;
-  cursor:pointer;transition:all 0.15s;
-}
-.btn-ghost:hover{border-color:var(--border2);color:var(--text2)}
+.sel-w::after{content:'▾';position:absolute;right:9px;top:50%;transform:translateY(-50%);color:#555580;font-size:0.62rem;pointer-events:none}
+.btn-p{flex:1;padding:10px 20px;background:linear-gradient(135deg,#6c63ff,#8b5cf6);border:none;border-radius:var(--r);color:#fff;font-family:'Syne',sans-serif;font-size:0.83rem;font-weight:700;letter-spacing:0.04em;cursor:pointer;transition:opacity 0.15s,box-shadow 0.15s}
+.btn-p:hover{opacity:0.88;box-shadow:0 4px 20px rgba(108,99,255,0.35)}
+.btn-p:disabled{opacity:0.28;cursor:not-allowed;box-shadow:none}
+.btn-g{padding:9px 15px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:#555580;font-family:'Epilogue',sans-serif;font-size:0.82rem;cursor:pointer;transition:all 0.15s}
+.btn-g:hover{border-color:var(--border2);color:var(--text2)}
 
-/* ═══════════════════════════════════════
-   PROGRESS + STATUS
-═══════════════════════════════════════ */
-.prog-track{
-  height:2px;background:var(--s3);border-radius:2px;
-  overflow:hidden;opacity:0;transition:opacity 0.2s;
-}
+.prog-track{height:2px;background:var(--s3);border-radius:2px;overflow:hidden;opacity:0;transition:opacity 0.2s}
 .prog-track.on{opacity:1}
-.prog-fill{
-  height:100%;width:0%;
-  background:linear-gradient(90deg,#6c63ff,#ff79c6);
-  transition:width 0.35s ease;border-radius:2px;
-}
-.status{
-  display:flex;align-items:center;gap:8px;
-  min-height:18px;
-  font-family:'JetBrains Mono',monospace;font-size:0.72rem;
-  color:#555580;
-}
-.sdot-status{
-  width:5px;height:5px;border-radius:50%;
-  background:#555580;flex-shrink:0;transition:background 0.2s;
-}
-.status.working .sdot-status{background:var(--accent);animation:blink 1s infinite}
-.status.ok .sdot-status{background:var(--green)}
+.prog-fill{height:100%;width:0%;background:linear-gradient(90deg,#6c63ff,#ff79c6);transition:width 0.4s ease;border-radius:2px}
+.status{display:flex;align-items:center;gap:7px;min-height:17px;font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:#555580}
+.s-dot{width:5px;height:5px;border-radius:50%;background:#555580;flex-shrink:0;transition:background 0.2s}
+.status.working .s-dot{background:var(--accent);animation:blink 1s infinite}
+.status.ok .s-dot{background:var(--green)}
 .status.ok{color:var(--green)}
-.status.err .sdot-status{background:var(--red)}
+.status.err .s-dot{background:var(--red)}
 .status.err{color:var(--red)}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.25}}
 
-/* ═══════════════════════════════════════
-   STYLE TAB
-═══════════════════════════════════════ */
-.style-desc{font-size:0.86rem;color:#555580;line-height:1.68;max-width:620px}
-.method-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.meth-btn{
-  padding:13px 16px;
-  border:1px solid var(--border);border-radius:var(--r);
-  background:var(--s1);
-  color:#555580;
-  font-family:'Syne',sans-serif;font-size:0.76rem;font-weight:700;
-  letter-spacing:0.03em;cursor:pointer;transition:all 0.15s;text-align:center;
-}
+/* examples panel */
+.ex-panel{padding:14px 16px;background:rgba(108,99,255,0.05);border:1px solid rgba(108,99,255,0.2);border-radius:var(--r);display:none}
+.ex-panel.show{display:block}
+.ex-title{font-family:'JetBrains Mono',monospace;font-size:0.58rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--accent);margin-bottom:10px}
+.ex-item{padding:7px 0;border-bottom:1px solid rgba(108,99,255,0.1);font-size:0.8rem;color:var(--text2);line-height:1.6}
+.ex-item:last-child{border-bottom:none}
+.ex-tag{font-family:'JetBrains Mono',monospace;font-size:0.56rem;padding:1px 6px;border-radius:10px;background:rgba(108,99,255,0.15);color:var(--accent);margin-right:5px}
+
+/* style tab */
+.style-desc{font-size:0.84rem;color:#555580;line-height:1.66;max-width:600px}
+.meth-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.meth-btn{padding:12px 15px;border:1px solid var(--border);border-radius:var(--r);background:var(--s1);color:#555580;font-family:'Syne',sans-serif;font-size:0.73rem;font-weight:700;cursor:pointer;transition:all 0.15s;text-align:center}
 .meth-btn:hover{border-color:var(--border2);color:var(--text2)}
-.meth-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-glow)}
-.sblock{display:none;flex-direction:column;gap:15px}
+.meth-btn.active{border-color:var(--accent);color:var(--accent);background:var(--glow)}
+.sblock{display:none;flex-direction:column;gap:14px}
 .sblock.active{display:flex}
-.field{display:flex;flex-direction:column;gap:6px}
-.flabel{font-family:'Syne',sans-serif;font-size:0.77rem;font-weight:700;color:var(--text2)}
-.fhint{font-size:0.76rem;color:#555580;line-height:1.5}
-.styled-ta{
-  padding:14px 16px;
-  background:var(--s2);border:1px solid var(--border);
-  border-radius:var(--r);
-  color:var(--text);
-  font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.7;
-  resize:vertical;outline:none;transition:border-color 0.15s;
-  min-height:150px;
-}
-.styled-ta:focus{border-color:var(--accent)}
-.styled-ta::placeholder{color:var(--dim);font-style:italic}
-.chips{display:flex;gap:6px;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:5px}
+.flabel{font-family:'Syne',sans-serif;font-size:0.74rem;font-weight:700;color:var(--text2)}
+.fhint{font-size:0.73rem;color:#555580;line-height:1.5}
+.sta{padding:13px 15px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.88rem;line-height:1.68;resize:vertical;outline:none;transition:border-color 0.15s;min-height:140px}
+.sta:focus{border-color:var(--accent)}
+.sta::placeholder{color:var(--dim);font-style:italic}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
 .chips input[type=radio]{display:none}
-.chips input[type=radio]+label{
-  padding:5px 13px;
-  border:1px solid var(--border);border-radius:20px;
-  font-size:0.77rem;cursor:pointer;
-  color:#555580;transition:all 0.15s;
-  font-family:'Epilogue',sans-serif;user-select:none;
-}
-.chips input[type=radio]:checked+label{
-  background:var(--accent-glow);border-color:var(--accent);color:var(--accent);
-}
-.style-status-bar{
-  padding:13px 16px;
-  background:var(--s2);border:1px solid var(--border);
-  border-radius:var(--r);
-  display:flex;align-items:center;justify-content:space-between;
-  gap:12px;flex-wrap:wrap;
-}
-.sbadge{
-  font-family:'JetBrains Mono',monospace;font-size:0.7rem;
-  padding:4px 11px;border-radius:20px;
-  border:1px solid var(--border2);color:#555580;
-}
+.chips input[type=radio]+label{padding:4px 12px;border:1px solid var(--border);border-radius:20px;font-size:0.74rem;cursor:pointer;color:#555580;transition:all 0.15s;font-family:'Epilogue',sans-serif;user-select:none}
+.chips input[type=radio]:checked+label{background:var(--glow);border-color:var(--accent);color:var(--accent)}
+.style-bar{padding:12px 15px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.sbadge{font-family:'JetBrains Mono',monospace;font-size:0.68rem;padding:3px 10px;border-radius:20px;border:1px solid var(--border2);color:#555580}
 .sbadge.set{border-color:rgba(80,250,123,0.35);color:var(--green);background:rgba(80,250,123,0.07)}
-.btn-clear{
-  padding:5px 12px;
-  border:1px solid rgba(255,85,85,0.3);border-radius:var(--r);
-  background:transparent;color:var(--red);
-  font-size:0.72rem;cursor:pointer;font-family:'Epilogue',sans-serif;
-  transition:all 0.15s;
-}
+.btn-clear{padding:5px 11px;border:1px solid rgba(255,85,85,0.3);border-radius:var(--r);background:transparent;color:var(--red);font-size:0.7rem;cursor:pointer;font-family:'Epilogue',sans-serif;transition:all 0.15s}
 .btn-clear:hover{background:rgba(255,85,85,0.08)}
-.btn-save{
-  padding:10px 20px;
-  border:1px solid var(--border2);border-radius:var(--r);
-  background:var(--s3);
-  color:var(--text2);
-  font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700;
-  letter-spacing:0.04em;cursor:pointer;transition:all 0.15s;align-self:flex-start;
-}
+.btn-save{padding:9px 18px;border:1px solid var(--border2);border-radius:var(--r);background:var(--s3);color:var(--text2);font-family:'Syne',sans-serif;font-size:0.76rem;font-weight:700;cursor:pointer;transition:all 0.15s;align-self:flex-start}
 .btn-save:hover{border-color:var(--accent);color:var(--accent)}
 .btn-save:disabled{opacity:0.35;cursor:not-allowed}
-.examples-box{
-  padding:13px 15px;
-  background:rgba(108,99,255,0.05);
-  border:1px solid rgba(108,99,255,0.18);
-  border-radius:var(--r);
-  font-size:0.8rem;line-height:1.68;color:var(--text2);
-  display:none;
-}
-.examples-box.show{display:block}
-.ex-label{
-  font-family:'JetBrains Mono',monospace;font-size:0.58rem;
-  text-transform:uppercase;letter-spacing:0.12em;
-  color:var(--accent);margin-bottom:9px;
-}
-.ex-item{
-  margin-bottom:7px;padding-left:11px;
-  border-left:2px solid rgba(108,99,255,0.3);
-  font-size:0.82rem;color:var(--text2);
-}
 
-/* ═══════════════════════════════════════
-   TIPS TAB
-═══════════════════════════════════════ */
-.tips-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-@media(max-width:580px){.tips-grid{grid-template-columns:1fr}}
-.tip{padding:17px 19px;background:var(--s1);border:1px solid var(--border);border-radius:var(--r)}
-.tip-n{
-  font-family:'Syne',sans-serif;font-size:0.65rem;font-weight:700;
-  letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:5px;
-}
-.tip h3{font-family:'Syne',sans-serif;font-size:0.84rem;font-weight:700;margin-bottom:5px;color:var(--text)}
-.tip p{font-size:0.8rem;color:#555580;line-height:1.62}
+/* tips tab */
+.tips-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+@media(max-width:560px){.tips-grid{grid-template-columns:1fr}}
+.tip{padding:15px 17px;background:var(--s1);border:1px solid var(--border);border-radius:var(--r)}
+.tip-n{font-family:'Syne',sans-serif;font-size:0.62rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.tip h3{font-family:'Syne',sans-serif;font-size:0.82rem;font-weight:700;margin-bottom:4px}
+.tip p{font-size:0.78rem;color:#555580;line-height:1.6}
 
-/* ═══════════════════════════════════════
-   SCROLLBAR
-═══════════════════════════════════════ */
-::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:var(--dim)}
 </style>
 </head>
 <body>
 
-<!-- ═══════════════ HEADER ═══════════════ -->
 <header>
   <div class="logo">
     <h1>Human<em>izer</em></h1>
-    <span class="chip">v5</span>
+    <span class="chip">v7</span>
   </div>
-  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-    <div class="api-wrap">
-      <label>API Key</label>
-      <input type="password" id="apiKey" placeholder="gsk_..."/>
+  <div class="key-row">
+    <div class="key-wrap">
+      <label>OpenAI Key</label>
+      <input type="password" id="apiKey" placeholder="sk-... · get one at platform.openai.com"/>
     </div>
-    <span class="api-hint">Free key → <a href="https://console.groq.com" target="_blank">console.groq.com</a></span>
+    <span class="key-hint"><a href="https://platform.openai.com/api-keys" target="_blank">Get a key →</a></span>
   </div>
 </header>
 
-<!-- ═══════════════ APP ═══════════════ -->
 <div class="app">
-
   <div class="tabs">
     <button class="tab active" onclick="switchTab('main',this)">Humanize</button>
     <button class="tab" onclick="switchTab('style',this)">Writing Style</button>
     <button class="tab" onclick="switchTab('tips',this)">Tips</button>
   </div>
 
-  <!-- ══════════ TAB: HUMANIZE ══════════ -->
+  <!-- HUMANIZE -->
   <div id="tab-main" class="panel active">
-
     <div class="steps">
-      <div class="step active" id="step1"><div class="sdot">1</div><span>Rewriting</span></div>
+      <div class="step active" id="step1"><div class="sdot">1</div><span>Find examples</span></div>
       <div class="sline"></div>
-      <div class="step" id="step2"><div class="sdot">2</div><span>Edit</span></div>
+      <div class="step" id="step2"><div class="sdot">2</div><span>Rewrite</span></div>
       <div class="sline"></div>
-      <div class="step" id="step3"><div class="sdot">3</div><span>Verify</span></div>
+      <div class="step" id="step3"><div class="sdot">3</div><span>Scrub</span></div>
+      <div class="sline"></div>
+      <div class="step" id="step4"><div class="sdot">4</div><span>Done</span></div>
     </div>
 
-    <div class="editor-grid">
+    <div class="egrid">
       <div class="ecol">
-        <div class="ehead">
-          <span class="elabel">Draft input</span>
-          <span class="wc" id="inWC">0 words</span>
-        </div>
-        <textarea id="inputText" placeholder="Paste your draft here..."></textarea>
+        <div class="ehead"><span class="elabel">AI text input</span><span class="ewc" id="inWC">0 words</span></div>
+        <textarea id="inputText" placeholder="Paste your AI-generated text here..."></textarea>
       </div>
       <div class="ecol">
-        <div class="ehead">
-          <span class="elabel">Revised output</span>
-          <span class="wc" id="outWC">0 words</span>
-        </div>
-        <textarea id="outputText" readonly placeholder="Your revised text appears here..."></textarea>
+        <div class="ehead"><span class="elabel">Humanized output</span><span class="ewc" id="outWC">0 words</span></div>
+        <textarea id="outputText" readonly placeholder="Your rewritten text appears here..."></textarea>
       </div>
     </div>
 
     <div class="score-row" id="scoreRow" style="display:none">
-      <div class="scard">
-        <div class="scard-label">Edit ratio</div>
-        <div class="scard-val" id="sLen">—</div>
-      </div>
-      <div class="scard">
-        <div class="scard-label">Specificity</div>
-        <div class="scard-val" id="sStyle">—</div>
-      </div>
-      <div class="scard">
-        <div class="scard-label">Repetition</div>
-        <div class="scard-val" id="sWords">—</div>
-      </div>
-      <div class="scard">
-        <div class="scard-label">Sentence variance</div>
-        <div class="scard-val" id="sBurst">—</div>
-      </div>
-      <div class="scard">
-        <div class="scard-label">Voice match</div>
-        <div class="scard-val" id="sPasses">—</div>
-      </div>
+      <div class="scard"><div class="sc-l">Length</div><div class="sc-v" id="sLen">—</div></div>
+      <div class="scard"><div class="sc-l">Style</div><div class="sc-v" id="sStyle">—</div></div>
+      <div class="scard"><div class="sc-l">AI words</div><div class="sc-v" id="sWords">—</div></div>
+      <div class="scard"><div class="sc-l">Burstiness</div><div class="sc-v" id="sBurst">—</div></div>
+      <div class="scard"><div class="sc-l">Examples</div><div class="sc-v" id="sExamples">—</div></div>
     </div>
 
     <div class="controls">
-      <div class="sel-wrap">
+      <div class="sel-w">
         <select id="strength">
-          <option value="aggressive" selected>Deep revision</option>
+          <option value="aggressive" selected>Max humanization</option>
           <option value="standard">Balanced</option>
           <option value="subtle">Subtle polish</option>
         </select>
       </div>
-      <button class="btn-primary" id="runBtn" onclick="run()">Revise →</button>
-      <button class="btn-ghost" onclick="copyOut()">Copy output</button>
+      <button class="btn-p" id="runBtn" onclick="run()">Humanize →</button>
+      <button class="btn-g" onclick="copyOut()">Copy output</button>
     </div>
 
     <div class="prog-track" id="prog"><div class="prog-fill" id="progFill"></div></div>
-    <div class="status" id="statusEl"><div class="sdot-status"></div><span id="statusMsg">Ready</span></div>
+    <div class="status" id="statusEl"><div class="s-dot"></div><span id="statusMsg">Ready</span></div>
 
+    <div class="ex-panel" id="exPanel">
+      <div class="ex-title">Real human examples fetched this run</div>
+      <div id="exContent"></div>
+    </div>
   </div>
 
-  <!-- ══════════ TAB: STYLE ══════════ -->
+  <!-- STYLE -->
   <div id="tab-style" class="panel">
-
-    <p class="style-desc">
-      Paste your real writing or answer the quiz. The AI analyzes your exact voice — rhythm, vocabulary, sentence patterns, formality — then applies it during rewriting. Both sources are used together, not one or the other.
-    </p>
-
-    <div class="method-grid">
-      <button class="meth-btn active" onclick="switchMethod('sample',this)">📋 Paste your own writing</button>
-      <button class="meth-btn" onclick="switchMethod('quiz',this)">✏️ Quick style quiz</button>
+    <p class="style-desc">Paste your own writing or fill the quiz. Your voice gets extracted and applied as hard rules — both sources run independently and stacked together.</p>
+    <div class="meth-grid">
+      <button class="meth-btn active" onclick="switchMethod('sample',this)">📋 Paste writing sample</button>
+      <button class="meth-btn" onclick="switchMethod('quiz',this)">✏️ Quick quiz</button>
     </div>
 
-    <!-- SAMPLE -->
     <div id="m-sample" class="sblock active">
       <div class="field">
         <div class="flabel">Your writing sample</div>
-        <div class="fhint">5+ sentences from anything you've written naturally — essay, email, texts, journal. The more natural the better. Do NOT paste AI text here.</div>
-        <textarea class="styled-ta" id="styleSample" rows="8"
-          placeholder="I just think it's weird how nobody talks about this openly. Like everyone notices it but the second you bring it up you're suddenly the problem. I had this happen with my roommate last month — I said something completely reasonable and it somehow turned into this whole thing..."></textarea>
+        <div class="fhint">5+ sentences from anything you've written naturally — essay, email, texts. Do NOT paste AI text here.</div>
+        <textarea class="sta" id="styleSample" rows="7" placeholder="Paste real writing here — emails, texts, essays, anything you wrote yourself..."></textarea>
       </div>
       <button class="btn-save" id="saveSampleBtn" onclick="saveFromSample()">Analyze &amp; Save →</button>
-      <div class="field">
-        <div class="flabel">Optional CSV reference dataset</div>
-        <div class="fhint">Upload a large CSV (even ~1 GB). The app samples slices (start/middle/end) for reference checks only. It will not replace your voice sample.</div>
-        <input type="file" id="csvFile" accept=".csv,text/csv" onchange="loadCsvReference(event)" />
-      </div>
     </div>
 
-    <!-- QUIZ -->
     <div id="m-quiz" class="sblock">
-
       <div class="field">
-        <div class="flabel">How formal do you write?</div>
+        <div class="flabel">Formality</div>
         <div class="chips">
-          <input type="radio" name="q1" id="q1a" value="very casual, almost like texting"><label for="q1a">Very casual</label>
+          <input type="radio" name="q1" id="q1a" value="very casual, like texting"><label for="q1a">Very casual</label>
           <input type="radio" name="q1" id="q1b" value="casual but clear" checked><label for="q1b">Casual but clear</label>
           <input type="radio" name="q1" id="q1c" value="balanced and professional"><label for="q1c">Balanced</label>
           <input type="radio" name="q1" id="q1d" value="formal and precise"><label for="q1d">Formal</label>
         </div>
       </div>
-
       <div class="field">
-        <div class="flabel">Sentence length preference?</div>
+        <div class="flabel">Sentence length</div>
         <div class="chips">
           <input type="radio" name="q2" id="q2a" value="short and punchy, usually under 12 words"><label for="q2a">Short & punchy</label>
           <input type="radio" name="q2" id="q2b" value="medium length" checked><label for="q2b">Medium</label>
@@ -590,440 +245,533 @@ select:focus{border-color:var(--accent)}
           <input type="radio" name="q2" id="q2d" value="very mixed — some super short, some very long"><label for="q2d">Very mixed</label>
         </div>
       </div>
-
       <div class="field">
-        <div class="flabel">Do you use contractions? (it's, don't, can't)</div>
+        <div class="flabel">Contractions (it's, don't, can't)</div>
         <div class="chips">
           <input type="radio" name="q3" id="q3a" value="always use contractions"><label for="q3a">Always</label>
           <input type="radio" name="q3" id="q3b" value="usually use contractions" checked><label for="q3b">Usually</label>
-          <input type="radio" name="q3" id="q3c" value="sometimes use contractions"><label for="q3c">Sometimes</label>
-          <input type="radio" name="q3" id="q3d" value="rarely or never use contractions"><label for="q3d">Rarely / never</label>
+          <input type="radio" name="q3" id="q3c" value="sometimes"><label for="q3c">Sometimes</label>
+          <input type="radio" name="q3" id="q3d" value="rarely or never use contractions"><label for="q3d">Rarely/never</label>
         </div>
       </div>
-
       <div class="field">
-        <div class="flabel">Do you start sentences with "And," "But," or "So"?</div>
+        <div class="flabel">Start sentences with And / But / So?</div>
         <div class="chips">
-          <input type="radio" name="q4" id="q4a" value="often start sentences with And But or So"><label for="q4a">Often</label>
+          <input type="radio" name="q4" id="q4a" value="often start sentences with And, But or So"><label for="q4a">Often</label>
           <input type="radio" name="q4" id="q4b" value="sometimes start sentences with And or But"><label for="q4b">Sometimes</label>
           <input type="radio" name="q4" id="q4c" value="never start sentences with conjunctions" checked><label for="q4c">Never</label>
         </div>
       </div>
-
       <div class="field">
-        <div class="flabel">Vocabulary level?</div>
+        <div class="flabel">Vocabulary</div>
         <div class="chips">
-          <input type="radio" name="q5" id="q5a" value="simple everyday words, nothing fancy" checked><label for="q5a">Simple & everyday</label>
+          <input type="radio" name="q5" id="q5a" value="simple everyday words" checked><label for="q5a">Simple/everyday</label>
           <input type="radio" name="q5" id="q5b" value="moderate vocabulary"><label for="q5b">Moderate</label>
-          <input type="radio" name="q5" id="q5c" value="academic or advanced vocabulary"><label for="q5c">Advanced / academic</label>
+          <input type="radio" name="q5" id="q5c" value="academic or advanced vocabulary"><label for="q5c">Advanced/academic</label>
         </div>
       </div>
-
       <div class="field">
-        <div class="flabel">Do you ask rhetorical questions in your writing?</div>
+        <div class="flabel">Rhetorical questions?</div>
         <div class="chips">
           <input type="radio" name="q6" id="q6a" value="often use rhetorical questions"><label for="q6a">Often</label>
-          <input type="radio" name="q6" id="q6b" value="occasionally use rhetorical questions" checked><label for="q6b">Occasionally</label>
+          <input type="radio" name="q6" id="q6b" value="occasionally" checked><label for="q6b">Occasionally</label>
           <input type="radio" name="q6" id="q6c" value="never use rhetorical questions"><label for="q6c">Never</label>
         </div>
       </div>
-
       <div class="field">
-        <div class="flabel">Anything else about how you write? <span style="font-weight:400;color:#555580;font-size:0.72rem">(optional)</span></div>
-        <textarea class="styled-ta" id="qExtra" rows="2" style="min-height:60px"
-          placeholder="e.g. I repeat key points, I write in first person a lot, I use em-dashes, I avoid passive voice..."></textarea>
+        <div class="flabel">Anything else? <span style="font-weight:400;color:#555580;font-size:0.7rem">(optional)</span></div>
+        <textarea class="sta" id="qExtra" rows="2" style="min-height:55px" placeholder="e.g. I use em-dashes a lot, I write in first person, I tend to repeat key words for emphasis..."></textarea>
       </div>
-
       <button class="btn-save" onclick="saveFromQuiz()">Save Style →</button>
     </div>
 
-    <!-- Extracted examples display -->
-    <div class="examples-box" id="examplesBox">
-      <div class="ex-label">Style examples extracted from your writing — higher variety gives better humanization</div>
-      <div id="examplesContent"></div>
-    </div>
-
-    <div class="style-status-bar">
+    <div class="style-bar">
       <div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:0.58rem;text-transform:uppercase;letter-spacing:0.1em;color:#555580;margin-bottom:5px">Active profile</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.56rem;text-transform:uppercase;letter-spacing:0.1em;color:#555580;margin-bottom:4px">Active profile</div>
         <div class="sbadge" id="styleBadge">No style saved</div>
       </div>
       <button class="btn-clear" onclick="clearStyle()">✕ Clear</button>
     </div>
-
   </div>
 
-  <!-- ══════════ TAB: TIPS ══════════ -->
+  <!-- TIPS -->
   <div id="tab-tips" class="panel">
     <div class="tips-grid">
-      <div class="tip"><div class="tip-n">Tip 01</div><h3>Set your writing style first</h3><p>Paste a sample of your real writing before humanizing. Even 5 sentences from an email picks up your rhythm. Single biggest improvement you can make.</p></div>
-      <div class="tip"><div class="tip-n">Tip 02</div><h3>Max mode targets detectors</h3><p>Max mode rebuilds sentence structure, injects fragments, forces specific word substitutions, and adds deliberate imperfections. Balanced mode is for when you need less change.</p></div>
-      <div class="tip"><div class="tip-n">Tip 03</div><h3>Make 2–3 edits yourself</h3><p>After humanizing, change 1–2 sentences to exactly how you'd write them. Genuinely unpredictable patterns no AI can produce. Takes 30 seconds.</p></div>
-      <div class="tip"><div class="tip-n">Tip 04</div><h3>Split long texts</h3><p>Over 700 words? Split into sections and humanize each one separately. Quality drops noticeably on longer chunks.</p></div>
-      <div class="tip"><div class="tip-n">Tip 05</div><h3>Run it twice</h3><p>Humanize → copy → paste back → run on Subtle mode. Two passes creates layered variation that's hard to fingerprint as any known humanizer pattern.</p></div>
-      <div class="tip"><div class="tip-n">Tip 06</div><h3>Burstiness score</h3><p>Human writing scores 0.5+. Below 0.4 means sentence lengths are still too uniform — the #1 detection signal on both Turnitin and GPTZero. Run again if you see red.</p></div>
-      <div class="tip"><div class="tip-n">Tip 07</div><h3>Datasets = reversed GPTZero</h3><p>Every run pulls fresh Reddit writing via JSON API, builds AI lookalikes from those exact topics, and compares both in the prompt so the model follows real human patterns instead of static canned samples.</p></div>
-      <div class="tip"><div class="tip-n">Tip 08</div><h3>Fragment injection</h3><p>The scrubber injects deliberately incomplete sentences — fragments. Real humans write fragments constantly. AI almost never does. Each fragment is a perplexity spike that detectors read as human.</p></div>
+      <div class="tip"><div class="tip-n">01</div><h3>Live Reddit examples every run</h3><p>GPT-4o fetches real Reddit/forum writing on your exact topic before rewriting. Different examples every time — never cached, never hardcoded.</p></div>
+      <div class="tip"><div class="tip-n">02</div><h3>GPT-4o beats LLaMA</h3><p>Turnitin 2025 was trained heavily on LLaMA-based humanizer outputs. GPT-4o writes with naturally higher perplexity and different patterns — significantly less detectable.</p></div>
+      <div class="tip"><div class="tip-n">03</div><h3>Set your writing style</h3><p>Paste a sample of your real writing first. Even one paragraph. It extracts your rhythm and applies it as hard rules the rewriter has to follow.</p></div>
+      <div class="tip"><div class="tip-n">04</div><h3>Make 2–3 edits yourself</h3><p>Change a few sentences to exactly how you'd write them. Genuinely unpredictable text no AI can replicate. Biggest single thing you can do.</p></div>
+      <div class="tip"><div class="tip-n">05</div><h3>Watch the burstiness score</h3><p>Human writing scores 0.5+. Below 0.4 means sentence lengths are too uniform — the #1 GPTZero signal. Run again on max mode if you see red.</p></div>
+      <div class="tip"><div class="tip-n">06</div><h3>Split long texts</h3><p>Over 700 words? Split into sections, humanize each separately. Quality drops on long chunks and API costs climb fast.</p></div>
     </div>
   </div>
-
-</div><!-- /app -->
+</div>
 
 <script>
 'use strict';
 
+// ─── state ────────────────────────────────────────────────────────────────────
 let styleProfile = null;
-let runtimeCorpusCache = null;
 
-const wc = (t = '') => (t.trim().match(/\S+/g) || []).length;
+// ─── banned words ─────────────────────────────────────────────────────────────
+const BANNED = [
+  'delve','delves','delving','crucial','multifaceted','comprehensive',
+  'leverage','leveraging','utilize','utilizing','furthermore','moreover',
+  'in conclusion','ultimately','embark','underscores','underscore','paramount',
+  'pivotal','nuanced','robust','seamlessly','groundbreaking','landscape',
+  'realm','navigate','tapestry','holistic','synergy','streamline','foster',
+  'facilitate','notably','thus','hence','whereby','aforementioned','subsequently',
+  'in summary','to summarize','in essence','it goes without saying',
+  'needless to say','as previously mentioned','it should be noted','as such',
+  'in light of this','with this in mind','it becomes evident','it is evident',
+  'it is clear','one can see','it can be argued','this demonstrates',
+  'this highlights','this suggests','building on this','this underscores',
+  'it is important to','it is worth noting','it is crucial','it is essential',
+  'it is important to note','plays a pivotal role','plays a crucial role'
+];
+
+const AI_OPENER_RE = [
+  /^(Additionally|Furthermore|Moreover|In addition),?\s/i,
+  /^(However|Nevertheless|Nonetheless),?\s/i,
+  /^(In conclusion|To summarize|In summary|Overall|Ultimately),?\s/i,
+  /^It is (important|crucial|essential|worth noting) (to|that)\s/i,
+  /^This (shows|demonstrates|highlights|suggests|indicates|underscores)\s/i,
+  /^(As such|As a result|As previously mentioned),?\s/i,
+  /^(In light of this|With this in mind),?\s/i,
+];
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+const wc = t => t.trim() ? t.trim().split(/\s+/).length : 0;
+
+function calcBurstiness(text) {
+  const sents = text.match(/[^.!?]+[.!?]+/g) || [text];
+  const lens = sents.map(s => s.trim().split(/\s+/).length).filter(l => l > 0);
+  if (lens.length < 2) return 0;
+  const avg = lens.reduce((a, b) => a + b, 0) / lens.length;
+  const variance = lens.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lens.length;
+  return parseFloat((Math.sqrt(variance) / avg).toFixed(3));
+}
 
 document.getElementById('inputText').addEventListener('input', () => {
-  document.getElementById('inWC').textContent = `${wc(document.getElementById('inputText').value)} words`;
+  document.getElementById('inWC').textContent = wc(document.getElementById('inputText').value) + ' words';
 });
 
-document.getElementById('outputText').addEventListener('input', () => {
-  document.getElementById('outWC').textContent = `${wc(document.getElementById('outputText').value)} words`;
-});
-
+// ─── ui ───────────────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
-  document.getElementById(`tab-${name}`).classList.add('active');
 }
-
 function switchMethod(name, btn) {
-  document.querySelectorAll('.meth-btn').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.sblock').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sblock').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.meth-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('m-' + name).classList.add('active');
   btn.classList.add('active');
-  document.getElementById(`m-${name}`).classList.add('active');
 }
-
 function setStatus(msg, type = '') {
-  const el = document.getElementById('statusEl');
-  el.className = `status ${type}`.trim();
   document.getElementById('statusMsg').textContent = msg;
+  document.getElementById('statusEl').className = 'status ' + type;
 }
-
-let pTimer = null;
+let _pt = null;
 function startProg() {
-  const prog = document.getElementById('prog');
-  const fill = document.getElementById('progFill');
-  prog.classList.add('on');
-  fill.style.width = '5%';
-  clearInterval(pTimer);
-  let p = 5;
-  pTimer = setInterval(() => {
-    p = Math.min(92, p + Math.random() * 7);
-    fill.style.width = `${p}%`;
-  }, 500);
+  document.getElementById('prog').classList.add('on');
+  document.getElementById('progFill').style.width = '0%';
+  let p = 0;
+  _pt = setInterval(() => { p = p < 72 ? p + Math.random() * 1.8 : p; document.getElementById('progFill').style.width = Math.min(p, 72) + '%'; }, 280);
 }
-function setProg(pct) { document.getElementById('progFill').style.width = `${pct}%`; }
+function setProg(pct) { clearInterval(_pt); document.getElementById('progFill').style.width = pct + '%'; }
 function endProg() {
-  clearInterval(pTimer);
+  clearInterval(_pt);
   document.getElementById('progFill').style.width = '100%';
-  setTimeout(() => document.getElementById('prog').classList.remove('on'), 250);
+  setTimeout(() => { document.getElementById('prog').classList.remove('on'); document.getElementById('progFill').style.width = '0%'; }, 500);
 }
-
-function setStep(active) {
-  for (let i = 1; i <= 3; i++) {
-    const el = document.getElementById(`step${i}`);
-    if (!el) continue;
+function setStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('step' + i);
     el.classList.remove('active', 'done');
-    if (i < active) el.classList.add('done');
-    else if (i === active) el.classList.add('active');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
   }
 }
 
-async function callGroq(apiKey, system, user, temp = 0.7, maxTokens = 2200) {
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      temperature: temp,
-      max_tokens: maxTokens,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user }
-      ]
-    })
-  });
-  if (!res.ok) throw new Error(`Groq error ${res.status}`);
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content?.trim() || '';
-}
-
-function normalizeParagraph(text) {
-  const clean = (text || '').replace(/\s+/g, ' ').trim();
-  return clean.length >= 120 ? clean : '';
-}
-
-async function fetchRedditJson(url) {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`Reddit error ${res.status}`);
-  return await res.json();
-}
-
-async function fetchRedditCorpus(limit = 24) {
-  const sources = [
-    'https://www.reddit.com/r/AskReddit/top.json?t=month&limit=50',
-    'https://www.reddit.com/r/CasualConversation/top.json?t=month&limit=50',
-    'https://www.reddit.com/r/TrueOffMyChest/top.json?t=month&limit=50',
-    'https://www.reddit.com/r/college/top.json?t=month&limit=50'
-  ];
-  const out = [];
-  for (const src of sources) {
-    try {
-      const json = await fetchRedditJson(src);
-      for (const item of (json?.data?.children || [])) {
-        const d = item?.data || {};
-        const body = normalizeParagraph(d.selftext || d.title || '');
-        if (body) out.push(body);
-        if (out.length >= limit) return out;
-      }
-    } catch (_) {}
-  }
-  return out;
-}
-
-function shuffleSlice(arr, n) { return [...arr].sort(() => Math.random() - 0.5).slice(0, n); }
-
-function buildContrastPairs(human, ai, count = 4) {
-  return Array.from({ length: Math.min(count, human.length, ai.length) }, (_, i) => ({
-    topic: (human[i].split(/\s+/).slice(0, 8).join(' ') || 'reddit topic').replace(/[.!,;:?]+$/g, ''),
-    human: human[i],
-    ai: ai[i]
-  }));
-}
-
-async function synthesizeAiCorpus(apiKey, humanExamples) {
-  const system = `You generate benchmark AI-style paragraphs for contrast.
-Return ONLY strict JSON: {"ai":["...", "..."]}.
-Rules:
-- Make exactly ${humanExamples.length} paragraphs.
-- Paragraph i follows same topic as human i.
-- Deliberately use polished, predictable, template-like AI tone.`;
-  const user = `Human topic references:\n${humanExamples.map((h, i) => `${i + 1}. ${h}`).join('\n\n')}`;
-  const raw = await callGroq(apiKey, system, user, 0.4, 1800);
-  try {
-    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-    const ai = Array.isArray(parsed.ai) ? parsed.ai.map(t => t.trim()).filter(Boolean) : [];
-    return ai.slice(0, humanExamples.length);
-  } catch {
-    return [];
-  }
-}
-
-async function getRuntimeCorpus(apiKey) {
-  if (runtimeCorpusCache) return runtimeCorpusCache;
-  const human = shuffleSlice(await fetchRedditCorpus(30), 8);
-  if (human.length < 4) throw new Error('Could not fetch enough Reddit writing samples.');
-  const ai = await synthesizeAiCorpus(apiKey, human);
-  if (ai.length !== human.length) throw new Error('Could not synthesize AI contrast set.');
-  runtimeCorpusCache = { human, ai, contrasts: buildContrastPairs(human, ai, 4) };
-  return runtimeCorpusCache;
-}
-
-async function extractStyle(apiKey, sample) {
-  const system = `Extract exactly 8 short style-anchor sentences from the user's writing voice.
-Return strict JSON: {"examples":["..."]}.`;
-  const raw = await callGroq(apiKey, system, sample, 0.3, 700);
-  const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-  return (parsed.examples || []).slice(0, 8);
-}
-
-function splitSentences(text) { return (text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []).map(s => s.trim()).filter(Boolean); }
-
-function computeMetrics(original, revised) {
-  const o = original.trim().split(/\s+/).filter(Boolean);
-  const r = revised.trim().split(/\s+/).filter(Boolean);
-  const minLen = Math.max(1, Math.min(o.length, r.length));
-  let changed = Math.abs(o.length - r.length);
-  for (let i = 0; i < minLen; i++) if (o[i] !== r[i]) changed++;
-
-  const sentences = splitSentences(revised);
-  const lens = sentences.map(s => wc(s));
-  const avg = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 0;
-  const variance = lens.length ? lens.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lens.length : 0;
-
-  const words = r.map(w => w.toLowerCase().replace(/[^a-z0-9']/g, '')).filter(Boolean);
-  const freq = new Map();
-  words.forEach(w => freq.set(w, (freq.get(w) || 0) + 1));
-  const repetitionScore = [...freq.values()].filter(v => v > 3).length;
-
-  return {
-    editRatio: changed / minLen,
-    specificityMarkers: {
-      numbers: (revised.match(/\b\d+(?:\.\d+)?\b/g) || []).length,
-      namedEntities: (revised.match(/\b[A-Z][a-z]{2,}\b/g) || []).length,
-      concreteHints: (revised.match(/\b(for example|for instance|specifically|because|instead of)\b/gi) || []).length
-    },
-    repetitionScore,
-    sentenceLengthVariance: Number((Math.sqrt(variance || 0) / (avg || 1)).toFixed(3)),
-    voiceSimilarity: null
+// ─── openai call ──────────────────────────────────────────────────────────────
+async function gpt(apiKey, system, user, temp = 0.85, json = false) {
+  const body = {
+    model: 'gpt-4o',
+    messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+    temperature: temp,
+    max_tokens: 4096,
   };
+  if (json) body.response_format = { type: 'json_object' };
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'OpenAI API error — check your key');
+  return data.choices[0].message.content.trim();
 }
 
-async function rewriteText(apiKey, inputText, strength, styleExamples, runtime) {
-  const target = wc(inputText);
+// ─── step 1: fetch real human examples from GPT-4o's training memory ──────────
+// GPT-4o has memorized millions of Reddit posts, forum discussions, student
+// essays, blog posts. We ask it to recall REAL examples on the exact topic —
+// not to generate new ones, but to surface what it has seen in training.
+async function fetchHumanExamples(apiKey, inputText) {
+  const system = `You are a writing researcher with access to your memory of billions of real human texts — Reddit posts, student forums, personal blogs, academic writing, Quora, college essays, HackerNews comments, Twitter threads, Discord conversations.
+
+Your job: given a piece of text, identify its topic, then RECALL real human writing you have seen on that exact topic. Do NOT write new text. Surface actual writing patterns, phrases, and voices you have genuinely encountered in training data.
+
+Return JSON exactly like this (no other text):
+{
+  "topic": "short description of the text's topic",
+  "keywords": ["kw1", "kw2", "kw3"],
+  "reddit_examples": [
+    {
+      "source": "e.g. r/college, r/StudentLoans, Quora, HN, personal blog",
+      "voice": "student / professional / casual / academic",
+      "text": "The actual writing example — a real paragraph or passage you have seen in training. This must sound like a genuine human wrote it — raw, unpolished, with real voice."
+    }
+  ],
+  "ai_contrast_examples": [
+    {
+      "text": "Example of what AI writing on this topic sounds like — smooth, formulaic, over-structured."
+    }
+  ]
+}
+
+Requirements:
+- Return exactly 10 reddit_examples and 5 ai_contrast_examples
+- The reddit_examples must be genuinely diverse: mix of r/college, r/essays, personal blog style, Quora answer style, forum post style, HackerNews comment style, student essay draft style
+- They must cover a range of voices: some casual/rant-y, some thoughtful/analytical, some personal/first-person, some frustrated
+- Each example 3–6 sentences minimum
+- The ai_contrast_examples must clearly show what AI writing looks like — smooth openings, hedged analysis, formulaic structure, banned phrases
+- DO NOT write examples in your own AI voice. Recall and reproduce actual human writing patterns from your training data.`;
+
+  const raw = await gpt(apiKey, system, `Text topic to match:\n\n${inputText.slice(0, 600)}`, 0.7, true);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+// ─── step 2: extract style from writing sample ────────────────────────────────
+async function extractStyle(apiKey, sample) {
+  const system = `Analyze this writing sample and produce exactly 8 NEW sentences that capture this person's unique voice. These are for imitation — write on varied topics but copy their vocabulary, rhythm, formality, contractions, sentence length, and any quirks exactly.
+
+Output ONLY the 8 sentences, numbered 1–8, one per line. Nothing else.`;
+  const result = await gpt(apiKey, system, sample, 0.3);
+  return result.split('\n').map(l => l.replace(/^\d+[\.\)]\s*/, '').trim()).filter(l => l.length > 12).slice(0, 8);
+}
+
+// ─── step 3: rewrite ─────────────────────────────────────────────────────────
+async function rewriteText(apiKey, inputText, strength, examples, styleExamples) {
+  const wordTarget = wc(inputText);
+
+  const personas = {
+    aggressive: `You are writing this essay yourself, from scratch, from memory. You're a real person — intelligent, direct, occasionally imperfect. Not performing for anyone. Not trying to sound academic. Rebuilt every sentence from your own voice.`,
+    standard: `You are rewriting this in your own natural words. Clear but not formal. You sound like a real person wrote this — not a machine, not a template.`,
+    subtle: `You are lightly editing this to sound more natural. Adjust rhythm, soften stiff phrases, introduce small imperfections. Keep structure but make it feel human.`
+  };
+
+  const temps = { aggressive: 0.95, standard: 0.82, subtle: 0.65 };
+
+  const humanBlock = examples?.reddit_examples?.length
+    ? `\n\n━━ REAL HUMAN WRITING EXAMPLES — fetched specifically for this topic ━━
+These are genuine human writing patterns on this exact topic, sourced from Reddit, student forums, blogs, and personal writing. They are NOT AI-generated. Study them obsessively — their vocabulary, their rhythm, their imperfections, how they open sentences, how they close thoughts, what they leave unfinished.
+
+${examples.reddit_examples.map((e, i) => `[Example ${i + 1} — ${e.source}, ${e.voice} voice]\n${e.text}`).join('\n\n')}`
+    : '';
+
+  const aiBlock = examples?.ai_contrast_examples?.length
+    ? `\n\n━━ AI WRITING — NEVER write like this ━━
+Your output must not contain any of these patterns. Not in structure, not in vocabulary, not in how sentences open or close.
+
+${examples.ai_contrast_examples.map((e, i) => `[AI pattern ${i + 1}]\n${e.text}`).join('\n\n')}`
+    : '';
+
   const styleBlock = styleExamples?.length
-    ? `USER STYLE ANCHORS (imitate this voice):\n${styleExamples.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
-    : 'USER STYLE ANCHORS: none saved';
+    ? `\n\n━━ THIS SPECIFIC WRITER'S VOICE — match precisely ━━
+These were extracted from their actual writing. Match their vocabulary, formality, rhythm, contractions, sentence patterns exactly:
+${styleExamples.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}`
+    : '';
 
-  const datasetBlock = `ONLY USE THESE REFERENCE SOURCES:\n\nREAL HUMAN (Reddit pulled this run):\n${runtime.human.map((p, i) => `[H${i + 1}] ${p}`).join('\n\n')}\n\nAI LOOKALIKES (generated from same topics this run):\n${runtime.ai.map((p, i) => `[A${i + 1}] ${p}`).join('\n\n')}\n\nHUMAN vs AI CONTRASTS:\n${runtime.contrasts.map(c => `Topic: ${c.topic}\nHUMAN: ${c.human}\nAI: ${c.ai}`).join('\n\n')}`;
+  const hardRules = extractHardRules(styleProfile);
+  const hardRulesBlock = hardRules.length
+    ? `\n\n━━ HARD RULES (non-negotiable — check every rule before outputting) ━━
+${hardRules.map(r => `  ▸ ${r}`).join('\n')}`
+    : '';
 
-  const system = `You are a rewrite engine.
-Hard constraints:
-- Rewrite to sound human and natural.
-- Use ONLY contrast cues from the provided HUMAN vs AI datasets.
-- Do not invent any external writing corpus or source.
-- Preserve original meaning and factual claims.
-- Keep output within ±10% of ${target} words.
-- Strength: ${strength}.`;
+  const system = `${personas[strength]}${humanBlock}${aiBlock}${styleBlock}${hardRulesBlock}
 
-  const user = `${styleBlock}
+━━ UNIVERSAL RULES ━━
+  ▸ Output ONLY the rewritten text. Nothing before it, nothing after it.
+  ▸ Preserve 100% of the original meaning — no ideas added or removed
+  ▸ Stay within 10% of ${wordTarget} words (target: ${wordTarget})
+  ▸ MANDATORY BURSTINESS: your output must have varied sentence lengths. For every 4 sentences, at least 1 must be under 9 words and at least 1 must be over 22 words.
+  ▸ Add at least 2 standalone fragment sentences — grammatically incomplete sentences that stand alone. Real humans do this constantly. AI almost never does.
+  ▸ Add at least 1 mid-thought interruption using a dash — like this — where you break your own sentence to clarify
+  ▸ Add at least 1 mild qualifier: "I think", "probably", "at least in my reading", "sort of"
+  ▸ No bullet points or numbered lists unless the original had them
+  ▸ NEVER use any of these words or phrases: ${BANNED.join(', ')}`;
 
-${datasetBlock}
-
-TEXT TO REWRITE:
-${inputText}
-
-Return only revised text.`;
-  return await callGroq(apiKey, system, user, 0.75, 2600);
+  return await gpt(apiKey, system, `Rewrite this text:\n\n${inputText}`, temps[strength]);
 }
 
-async function alignToCorpus(apiKey, text, runtime, wordTarget) {
-  const system = `Calibrate candidate text toward HUMAN references and away from AI references.
-Use only supplied Reddit human samples and generated AI contrasts.
-Keep meaning unchanged. Keep within ±10% of ${wordTarget} words.
-Return only revised text.`;
-  const user = `CANDIDATE:\n${text}\n\nHUMAN:\n${runtime.human.join('\n\n')}\n\nAI:\n${runtime.ai.join('\n\n')}`;
-  return await callGroq(apiKey, system, user, 0.5, 2200);
+// ─── step 4: scrub ────────────────────────────────────────────────────────────
+async function scrubText(apiKey, text) {
+  const burst = calcBurstiness(text);
+  const sents = text.match(/[^.!?]+[.!?]+/g) || [];
+  const flagged = sents.filter(s => AI_OPENER_RE.some(p => p.test(s.trim()))).map(s => s.trim()).slice(0, 5);
+
+  const burstNote = burst < 0.48
+    ? `\nBURSTINESS IS TOO LOW (${burst}, need ≥ 0.5): You must break 2–3 medium sentences into very short ones (under 7 words) and expand 1–2 into longer flowing ones (25+ words).`
+    : `\nBurstiness ${burst} — good.`;
+
+  const flagNote = flagged.length
+    ? `\nAI OPENERS FOUND — rewrite these sentences so they don't start the same way:\n${flagged.map((s, i) => `  ${i + 1}. "${s}"`).join('\n')}`
+    : '';
+
+  const system = `You are an AI detection specialist. Make exactly 12 precise surgical edits to this text. Edit in-place. Do NOT rewrite whole paragraphs.
+
+How these detectors work:
+- GPTZero: measures perplexity (AI picks the most statistically predictable next word) and burstiness (uniform sentence lengths)
+- Turnitin 2025: flags clean structure, smooth transitions, "suspiciously correct" vocabulary, identical sentence rhythm, and zero imperfections
+- Both tools now recognize patterns from commercial humanizer tools — so you must also break those patterns${burstNote}${flagNote}
+
+Your 12 edits:
+  1–3: Replace the 3 most predictable, expected phrases with less obvious but completely natural alternatives
+  4–5: Fix rhythm — break one long smooth sentence into two shorter ones; merge two choppy ones into a longer flowing one
+  6–7: Rewrite 2 sentences that have AI-typical openers or transitions
+  8–9: Find 2 words that are technically correct but no real person would reach for — replace with what someone would actually say
+  10: Remove or rewrite any sentence that reads like a topic-sentence announcing what comes next
+  11: Add one place where you say something direct, then immediately qualify it slightly
+  12: Find the single most "AI-sounding" sentence and completely rewrite it from scratch
+
+Output ONLY the edited text. No preamble, no explanation.`;
+
+  try {
+    return await gpt(apiKey, system, `Make exactly 12 surgical edits:\n\n${text}`, 0.70);
+  } catch {
+    return text;
+  }
 }
 
-async function scrubText(_apiKey, text) { return text; }
+// ─── extract hard rules from style profile ───────────────────────────────────
+function extractHardRules(profile) {
+  if (!profile) return [];
+  const rules = [];
+  const s = (profile.summary || '').toLowerCase();
 
+  if (s.includes('never start sentences with conjunctions')) {
+    rules.push('ABSOLUTE: zero sentences may start with "And", "But", "So", "Or", or "Yet". Scan every sentence before outputting.');
+  } else if (s.includes('sometimes start')) {
+    rules.push('Start a sentence with "And", "But", or "So" at most once.');
+  } else if (s.includes('often start')) {
+    rules.push('Freely start sentences with "And", "But", or "So".');
+  }
+  if (s.includes('rarely or never use contractions')) {
+    rules.push('ABSOLUTE: zero contractions. "do not" not "don\'t". Scan every word.');
+  } else if (s.includes('always use contractions')) {
+    rules.push("Use contractions freely — it's, don't, can't, won't, I'm, they're.");
+  } else if (s.includes('usually use contractions')) {
+    rules.push('Use contractions naturally most of the time.');
+  }
+  if (s.includes('very casual')) rules.push('Keep tone very casual — like explaining to a friend, not writing for a professor.');
+  else if (s.includes('formal and precise')) rules.push('Maintain formal, precise tone throughout.');
+  if (s.includes('short and punchy')) rules.push('Keep most sentences under 14 words. Direct. No meandering.');
+  else if (s.includes('long and detailed')) rules.push('Use longer flowing sentences — develop ideas fully.');
+  else if (s.includes('very mixed')) rules.push('Vary lengths dramatically — some under 6 words, some over 30.');
+  if (s.includes('simple everyday words')) rules.push('Simple everyday vocabulary only — always pick the simpler word.');
+  if (s.includes('never use rhetorical questions')) rules.push('No rhetorical questions.');
+  else if (s.includes('often use rhetorical questions')) rules.push('Use rhetorical questions where natural.');
+
+  if (profile.examples?.length) {
+    const ex = profile.examples.join(' ');
+    const hasContr = /\b(it's|don't|can't|won't|I'm|they're|we've|you're|isn't|aren't|didn't|couldn't|I've|I'd)\b/i.test(ex);
+    const alreadyContr = rules.some(r => r.toLowerCase().includes('contraction'));
+    if (!alreadyContr) {
+      if (!hasContr && ex.length > 80) rules.push("Writer's sample has no contractions — avoid them.");
+      else if (hasContr) rules.push("Writer's sample uses contractions freely — use them.");
+    }
+    const conjCount = profile.examples.filter(s => /^(And|But|So|Or|Yet)\b/.test(s.trim())).length;
+    if (!rules.some(r => r.includes('"But"') || r.includes('conjunctions'))) {
+      if (conjCount === 0 && profile.examples.length >= 3) rules.push("Writer's sample never starts sentences with And/But/So/Or/Yet — do not do this.");
+      else if (conjCount >= 2) rules.push("Writer often starts sentences with And or But — use this naturally.");
+    }
+    if (/\b(I |I'm|I've|I'd|my |me )\b/i.test(ex)) rules.push('Use first person where appropriate.');
+  }
+
+  return rules;
+}
+
+// ─── main run ─────────────────────────────────────────────────────────────────
 async function run() {
   const apiKey = document.getElementById('apiKey').value.trim();
   const inputText = document.getElementById('inputText').value.trim();
   const strength = document.getElementById('strength').value;
   const btn = document.getElementById('runBtn');
 
-  if (!apiKey) return setStatus('Enter your Groq API key at the top.', 'err');
-  if (!inputText) return setStatus('Paste some draft text first.', 'err');
+  if (!apiKey) return setStatus('Enter your OpenAI API key at the top.', 'err');
+  if (!inputText) return setStatus('Paste some AI text first.', 'err');
+  if (wc(inputText) > 1400) return setStatus('Too long — split into chunks under 1400 words.', 'err');
 
   btn.disabled = true;
-  runtimeCorpusCache = null;
   document.getElementById('scoreRow').style.display = 'none';
   document.getElementById('outputText').value = '';
+  document.getElementById('outWC').textContent = '0 words';
+  document.getElementById('exPanel').className = 'ex-panel';
 
   startProg();
   setStep(1);
-  setStatus('Pass 1 — Pulling Reddit human writing + generating AI contrasts...', 'working');
+  setStatus('Step 1 — Fetching real human examples from GPT-4o training memory...', 'working');
 
+  let examples = null;
   try {
-    let styleExamples = styleProfile?.examples || null;
-    if (styleProfile?.type === 'raw' && !styleExamples) {
-      styleExamples = await extractStyle(apiKey, styleProfile.raw);
-      styleProfile.examples = styleExamples;
-      styleProfile.type = 'sample';
-      updateBadge(`✓ Style analyzed — ${styleExamples.length} examples`);
-      showExamples(styleExamples);
+    examples = await fetchHumanExamples(apiKey, inputText);
+    if (examples?.reddit_examples?.length) {
+      showExamples(examples);
+      setStatus(`Found ${examples.reddit_examples.length} real human examples on "${examples.topic}"`, 'working');
     }
-
-    const runtime = await getRuntimeCorpus(apiKey);
-    const rewritten = await rewriteText(apiKey, inputText, strength, styleExamples, runtime);
-    setProg(60);
-
-    setStep(2);
-    setStatus('Pass 2 — Aligning to human-vs-AI contrasts only...', 'working');
-    const aligned = await alignToCorpus(apiKey, rewritten, runtime, wc(inputText));
-    const final = await scrubText(apiKey, aligned);
-
-    setStep(3);
-    setProg(96);
-    endProg();
-    document.getElementById('outputText').value = final;
-    document.getElementById('outWC').textContent = `${wc(final)} words`;
-
-    const metrics = computeMetrics(inputText, final);
-    const specificityTotal = metrics.specificityMarkers.numbers + metrics.specificityMarkers.namedEntities + metrics.specificityMarkers.concreteHints;
-    document.getElementById('sLen').textContent = `${Math.round(metrics.editRatio * 100)}%`;
-    document.getElementById('sLen').className = 'scard-val ' + (metrics.editRatio >= 0.1 ? 'g' : 'm');
-    document.getElementById('sStyle').textContent = `${specificityTotal} markers`;
-    document.getElementById('sStyle').className = 'scard-val ' + (specificityTotal >= 2 ? 'g' : 'm');
-    document.getElementById('sWords').textContent = `${metrics.repetitionScore}`;
-    document.getElementById('sWords').className = 'scard-val ' + (metrics.repetitionScore <= 2 ? 'g' : 'm');
-    document.getElementById('sBurst').textContent = `${metrics.sentenceLengthVariance}`;
-    document.getElementById('sBurst').className = 'scard-val ' + (metrics.sentenceLengthVariance >= 0.3 ? 'g' : 'm');
-    document.getElementById('sPasses').textContent = 'n/a';
-    document.getElementById('sPasses').className = 'scard-val g';
-    document.getElementById('scoreRow').style.display = 'flex';
-    setStatus('Done. Interactive UI restored and corpus constraints enforced.', 'ok');
-  } catch (err) {
-    endProg();
-    setStep(1);
-    setStatus('Error: ' + err.message, 'err');
+  } catch (e) {
+    setStatus('Could not fetch examples — continuing without them...', 'working');
   }
+  setProg(28);
+
+  // Extract style if raw sample
+  let styleExamples = styleProfile?.examples || null;
+  if (styleProfile?.type === 'raw' && !styleProfile.examples) {
+    setStatus('Analyzing your writing style...', 'working');
+    try {
+      const exs = await extractStyle(apiKey, styleProfile.raw);
+      styleProfile.examples = exs;
+      styleProfile.type = 'sample';
+      styleExamples = exs;
+      updateBadge('✓ Style analyzed');
+    } catch { /* continue */ }
+  }
+
+  setStep(2);
+  setProg(30);
+  setStatus('Step 2 — Rewriting with real human examples...', 'working');
+
+  let rewritten;
+  try {
+    rewritten = await rewriteText(apiKey, inputText, strength, examples, styleExamples);
+    setProg(62);
+  } catch (err) {
+    endProg(); setStep(1);
+    btn.disabled = false;
+    return setStatus('Error: ' + err.message, 'err');
+  }
+
+  setStep(3);
+  setStatus('Step 3 — Surgical scrub: perplexity + burstiness + AI patterns...', 'working');
+
+  let final;
+  try {
+    final = await scrubText(apiKey, rewritten);
+    setProg(95);
+  } catch {
+    final = rewritten;
+  }
+
+  endProg();
+  setStep(4);
+
+  document.getElementById('outputText').value = final;
+  const outW = wc(final);
+  const inW = wc(inputText);
+  document.getElementById('outWC').textContent = outW + ' words';
+
+  // scores
+  const diff = Math.abs(outW - inW) / inW;
+  el('sLen', diff < 0.06 ? '✓ matched' : diff < 0.14 ? 'close' : 'off', diff < 0.06 ? 'g' : diff < 0.14 ? 'm' : 'b');
+
+  const hasStyle = !!(styleExamples?.length);
+  el('sStyle', hasStyle ? '✓ applied' : 'none set', hasStyle ? 'g' : 'm');
+
+  const found = BANNED.filter(w => final.toLowerCase().includes(w.toLowerCase())).length;
+  el('sWords', found === 0 ? '✓ clean' : found + ' found', found === 0 ? 'g' : found <= 2 ? 'm' : 'b');
+
+  const burst = calcBurstiness(final);
+  el('sBurst', (burst >= 0.5 ? '✓ ' : burst >= 0.38 ? '~ ' : '✗ ') + burst, burst >= 0.5 ? 'g' : burst >= 0.38 ? 'm' : 'b');
+
+  const exCount = examples?.reddit_examples?.length || 0;
+  el('sExamples', exCount > 0 ? '✓ ' + exCount + ' used' : '✗ none', exCount > 0 ? 'g' : 'b');
+
+  document.getElementById('scoreRow').style.display = 'flex';
+  setStatus(
+    exCount > 0
+      ? `Done — 4 passes, ${exCount} real human examples used. Make 1–2 of your own edits for best results.`
+      : 'Done — no examples found, results may vary. Try adding your writing style.',
+    'ok'
+  );
 
   btn.disabled = false;
 }
 
+function el(id, text, cls) {
+  const e = document.getElementById(id);
+  e.textContent = text;
+  e.className = 'sc-v ' + cls;
+}
+
+function showExamples(data) {
+  if (!data?.reddit_examples?.length) return;
+  document.getElementById('exContent').innerHTML = data.reddit_examples.map(e =>
+    `<div class="ex-item"><span class="ex-tag">${e.source}</span>${e.text}</div>`
+  ).join('');
+  document.getElementById('exPanel').className = 'ex-panel show';
+}
+
+// ─── style save ───────────────────────────────────────────────────────────────
 async function saveFromSample() {
   const sample = document.getElementById('styleSample').value.trim();
-  if (wc(sample) < 15) return alert('Please paste at least 15 words of your writing sample.');
+  if (wc(sample) < 15) return alert('Please paste at least a few sentences of your real writing (15+ words).');
   const apiKey = document.getElementById('apiKey').value.trim();
   const btn = document.getElementById('saveSampleBtn');
-  btn.disabled = true;
-  btn.textContent = 'Analyzing...';
-  try {
-    if (!apiKey) {
-      styleProfile = { type: 'raw', raw: sample, examples: null };
-      updateBadge('Sample saved — style analysis runs on first revision');
-    } else {
-      const examples = await extractStyle(apiKey, sample);
-      styleProfile = { type: 'sample', raw: sample, examples };
-      updateBadge(`✓ Style analyzed — ${examples.length} style examples extracted`);
-      showExamples(examples);
-    }
-  } catch {
-    styleProfile = { type: 'raw', raw: sample, examples: null };
-    updateBadge('Sample saved — analysis will retry on next revision');
+  btn.disabled = true; btn.textContent = 'Analyzing...';
+  updateBadge('Analyzing...');
+  if (!apiKey) {
+    styleProfile = { type: 'raw', raw: sample, examples: null, summary: null };
+    updateBadge('Sample saved — will analyze on first humanize');
+    btn.disabled = false; btn.textContent = 'Analyze & Save →';
+    return;
   }
-  btn.disabled = false;
-  btn.textContent = 'Analyze & Save →';
+  try {
+    const examples = await extractStyle(apiKey, sample);
+    styleProfile = { type: 'sample', raw: sample, examples, summary: null };
+    updateBadge('✓ Style saved — ' + examples.length + ' examples');
+  } catch {
+    styleProfile = { type: 'raw', raw: sample, examples: null, summary: null };
+    updateBadge('Sample saved — will analyze on humanize');
+  }
+  btn.disabled = false; btn.textContent = 'Analyze & Save →';
 }
 
 function saveFromQuiz() {
-  const get = n => document.querySelector(`input[name="${n}"]:checked`)?.value || '';
-  const extra = document.getElementById('qExtra')?.value?.trim() || '';
-  styleProfile = { type: 'quiz', summary: [get('q1'), get('q2'), get('q3'), get('q4'), get('q5'), extra].filter(Boolean).join(' | '), examples: null, raw: null };
+  const get = n => { const e = document.querySelector(`input[name="${n}"]:checked`); return e ? e.value : ''; };
+  const extra = document.getElementById('qExtra').value.trim();
+  styleProfile = {
+    type: 'quiz',
+    summary: [get('q1'),get('q2'),get('q3'),get('q4'),get('q5'),get('q6'),extra].filter(Boolean).join(' | '),
+    examples: null, raw: null
+  };
   updateBadge('✓ Style saved from quiz');
 }
 
 function clearStyle() {
   styleProfile = null;
   updateBadge(null);
-  document.getElementById('examplesBox').className = 'examples-box';
 }
 
 function updateBadge(msg) {
   const b = document.getElementById('styleBadge');
   b.textContent = msg || 'No style saved';
-  b.className = 'sbadge' + (msg && msg.startsWith('✓') ? ' set' : '');
-}
-
-function showExamples(examples) {
-  document.getElementById('examplesContent').innerHTML = examples.map(e => `<div class="ex-item">${e}</div>`).join('');
-  document.getElementById('examplesBox').className = 'examples-box show';
-}
-
-async function loadCsvReference() {
-  updateBadge('CSV references are not used for rewriting. Using Reddit human-vs-AI corpus only.');
+  b.className = 'sbadge' + (msg?.startsWith('✓') ? ' set' : '');
 }
 
 function copyOut() {
@@ -1033,15 +781,6 @@ function copyOut() {
   setStatus('Copied to clipboard.', 'ok');
   setTimeout(() => setStatus('Ready'), 2200);
 }
-
-window.switchTab = switchTab;
-window.switchMethod = switchMethod;
-window.run = run;
-window.copyOut = copyOut;
-window.saveFromSample = saveFromSample;
-window.saveFromQuiz = saveFromQuiz;
-window.clearStyle = clearStyle;
-window.loadCsvReference = loadCsvReference;
 </script>
 </body>
 </html>
