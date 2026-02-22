@@ -1,25 +1,15 @@
 // ═══════════════════════════════════════════════════════════════════
-//  pipeline.js — multi-pass humanization using Mistral AI
-//  Core approach: sentence-structure imitation from real human examples.
-//  Not rules about how to write — literal structural copying.
+//  pipeline.js — Humanizer pipeline using Mistral AI
+//  No Reddit scraping. Uses HuggingFace human writing dataset.
+//  Core approach: sentence-structure imitation from Aiden's real writing.
 // ═══════════════════════════════════════════════════════════════════
 
 import fetch from 'node-fetch';
-import { gatherHumanExamples } from './scraper.js';
 
 const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MODEL = 'mistral-large-latest';
 
-const EXAMPLE_COUNT_REWRITE  = 10;
-const EXAMPLE_COUNT_SPLICE   = 20;
-const EXAMPLE_COUNT_SCRUB    = 5;
-const EXAMPLE_MAX_CHARS      = 400;
-const EXAMPLE_MAX_CHARS_FAST = 200;
-
-// ─── Real dataset: Aiden's actual answers ────────────────────────────────────
-// These are used as structural templates — the model imitates sentence by sentence,
-// not just extracts rules. This is why they must stay as full verbatim answers.
-
+// ─── Aiden's real answers — the structural templates ─────────────────────────
 const AIDEN_EXAMPLES = [
   {
     question: "How is AI changing the way startups compete in finance?",
@@ -47,7 +37,6 @@ const AIDEN_EXAMPLES = [
   }
 ];
 
-// ─── AI examples — shown so model knows exactly what NOT to produce ───────────
 const AI_EXAMPLES = [
   {
     label: "ChatGPT — DO NOT write like this",
@@ -58,13 +47,6 @@ const AI_EXAMPLES = [
     sample: `AI is reshaping startup competition in financial services in some pretty fundamental ways. Here's what's driving the shift: Leveling the playing field on data — Traditionally, incumbents had a massive moat in the form of decades of customer transaction data. The honest caveat is that AI also introduces new risks — model bias in lending, explainability challenges for regulators, and systemic fragility if many institutions rely on similar underlying models.`
   }
 ];
-
-// ─── What GPTZero actually flags — these are the specific patterns ────────────
-// This list comes from reverse-engineering what GPTZero 4.2b flags as AI.
-// The key insight: GPTZero flags PREDICTABILITY, not just vocabulary.
-// A sentence is flagged when every word is the most likely next word.
-// Aiden's writing is unpredictable because he states things bluntly,
-// repeats phrases unexpectedly, and doesn't follow essay structure.
 
 const BANNED = [
   'delve','delves','delving','crucial','multifaceted','comprehensive',
@@ -90,13 +72,12 @@ const AI_OPENERS = [
   /^It is (important|crucial|essential|worth noting) (to|that)\s/i,
   /^This (shows|demonstrates|highlights|suggests|indicates|underscores)\s/i,
   /^(As such|As a result|As previously mentioned),?\s/i,
-  /^(In light of this|With this in mind),?\s/i,
   /^(First|Second|Third|Fourth|Fifth),?\s/i,
   /^(Here'?s? (what|why|the|how))/i,
   /^(It is (clear|evident|apparent) that)\s/i,
 ];
 
-// ─── Mistral API ──────────────────────────────────────────────────────────────
+// ─── Mistral API call ─────────────────────────────────────────────────────────
 async function mistral(apiKey, system, user, temp = 0.85, maxTokens = 2048) {
   const res = await fetch(MISTRAL_URL, {
     method: 'POST',
@@ -115,15 +96,54 @@ async function mistral(apiKey, system, user, temp = 0.85, maxTokens = 2048) {
     })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || data.error?.message || 'Mistral API error');
+  if (!res.ok) {
+    const errMsg = data.message || data.error?.message || JSON.stringify(data);
+    throw new Error(`Mistral API error: ${errMsg}`);
+  }
+  if (!data.choices || !data.choices[0]) {
+    throw new Error(`Unexpected Mistral response: ${JSON.stringify(data).slice(0, 200)}`);
+  }
   return data.choices[0].message.content.trim();
 }
 
+// ─── Fetch real human writing samples from HuggingFace dataset ───────────────
+// gsingh1-py/train has 7321 rows of real human writing in Human_story column
+let cachedHumanSamples = null;
+async function getHumanSamples() {
+  if (cachedHumanSamples) return cachedHumanSamples;
+  try {
+    const url = 'https://datasets-server.huggingface.co/rows?dataset=gsingh1-py%2Ftrain&config=default&split=train&offset=0&length=100';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`HF API returned ${res.status}`);
+    const data = await res.json();
+    const rows = data.rows || [];
+    const samples = rows
+      .map(r => r.row?.Human_story || '')
+      .filter(s => s && s.length > 100 && s.length < 800)
+      .map(s => s.replace(/\s+/g, ' ').trim());
+    cachedHumanSamples = samples;
+    console.log(`  → Loaded ${samples.length} human writing samples from HuggingFace`);
+    return samples;
+  } catch (e) {
+    console.log(`  → HuggingFace fetch failed: ${e.message} — using Aiden examples only`);
+    return [];
+  }
+}
+
 // ─── Utils ────────────────────────────────────────────────────────────────────
-function wc(text) { return text.trim().split(/\s+/).length; }
+function wc(text) {
+  if (!text || !text.trim()) return 0;
+  return text.trim().split(/\s+/).length;
+}
 
 function getSentences(text) {
-  return (text.match(/[^.!?]+[.!?]+/g) || [text]).map(s => s.trim());
+  return (text.match(/[^.!?]+[.!?]+/g) || [text]).map(s => s.trim()).filter(s => s.length > 0);
 }
 
 function calcBurstiness(text) {
@@ -157,30 +177,13 @@ function scoreText(text) {
 
 function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
 
-function pickExamples(examples, n, maxChars) {
-  return shuffle(examples).slice(0, n).map(e => ({ ...e, text: e.text.slice(0, maxChars) }));
-}
-
-// ─── Hard trim — prevents any pass from snowballing ──────────────────────────
-async function hardTrim(apiKey, text, targetWC) {
-  const current = wc(text);
-  if (current <= Math.ceil(targetWC * 1.15)) return text;
-  const system = `Trim this text from ${current} words to approximately ${targetWC} words.
-Remove repeated ideas, filler phrases, redundant clauses.
-Do NOT remove any unique ideas or arguments.
-Output ONLY the trimmed text. Nothing else.`;
-  return await mistral(apiKey, system, text, 0.3, targetWC * 3);
-}
-
-// ─── Find the Aiden example most similar to a question (for Answer tab) ───────
-// For out-of-dataset questions, fall back to the most structurally versatile examples
+// ─── Find Aiden example by question similarity ────────────────────────────────
 function findClosestAidenExample(question) {
   const q = question.toLowerCase();
   const qWords = q.split(/\s+/).filter(w => w.length > 3);
 
   const scored = AIDEN_EXAMPLES.map((ex, i) => {
     const exWords = ex.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    // Score both word overlap AND semantic overlap (partial matches)
     const exact = qWords.filter(w => exWords.includes(w)).length;
     const partial = qWords.filter(w => exWords.some(ew => ew.includes(w) || w.includes(ew))).length;
     return { i, score: exact * 2 + partial };
@@ -188,7 +191,6 @@ function findClosestAidenExample(question) {
 
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    // Tiebreak: prefer examples 4 (domestic) or 1 (jobs) — most versatile argument structures
     const prefer = [4, 1, 2, 3, 0, 5];
     return prefer.indexOf(a.i) - prefer.indexOf(b.i);
   });
@@ -196,7 +198,7 @@ function findClosestAidenExample(question) {
   return AIDEN_EXAMPLES[scored[0].i];
 }
 
-// ─── Find Aiden example closest in sentence count to input (for Humanize) ─────
+// ─── Find Aiden example closest in sentence count ────────────────────────────
 function findClosestByLength(inputText) {
   const inputCount = getSentences(inputText).length;
   return AIDEN_EXAMPLES.reduce((best, ex) => {
@@ -206,240 +208,45 @@ function findClosestByLength(inputText) {
   });
 }
 
-// ─── Build the sentence-by-sentence breakdown of an example ───────────────────
 function sentenceBreakdown(text) {
   return getSentences(text)
-    .map((s, i) => `  S${i + 1}: "${s}"`)
+    .map((s, i) => `  S${i + 1} [${s.split(/\s+/).length}w]: "${s}"`)
     .join('\n');
 }
 
-// ─── PASS 1: Extract topic + keywords ────────────────────────────────────────
-async function extractTopic(apiKey, text) {
-  const system = `Extract the core topic and a short Reddit search phrase from this text.
-Return JSON only, no other text:
-{"topic":"short topic name","keywords":"3 to 5 words total for Reddit search","genre":"essay|argument|analysis|personal|technical"}
-Keywords must be 3-5 words total. One phrase only. Not a list.`;
-  const raw = await mistral(apiKey, system, text.slice(0, 600), 0.1, 150);
-  try {
-    const cleaned = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-    if (parsed.keywords && parsed.keywords.split(/\s+/).length > 6) {
-      parsed.keywords = parsed.keywords.split(/\s+/).slice(0, 5).join(' ');
-    }
-    return parsed;
-  } catch {
-    return { topic: 'general topic', keywords: 'college essay writing', genre: 'essay' };
-  }
+// ─── Hard trim guard ──────────────────────────────────────────────────────────
+async function hardTrim(apiKey, text, targetWC) {
+  if (!text || !text.trim()) throw new Error('hardTrim received empty text');
+  const current = wc(text);
+  if (current <= Math.ceil(targetWC * 1.15)) return text;
+  console.log(`  → Hard trim: ${current} → ~${targetWC} words`);
+  const result = await mistral(apiKey,
+    `Trim this text from ${current} to approximately ${targetWC} words. Remove repeated ideas and filler. Keep all unique arguments. Output ONLY the trimmed text.`,
+    text, 0.3, targetWC * 3);
+  return result;
 }
 
-// ─── PASS 3: Rewrite using sentence-structure imitation ──────────────────────
-async function rewriteHuman(apiKey, inputText, humanExamples, strength, styleProfile) {
-  const wordTarget = wc(inputText);
-  const minWords = Math.floor(wordTarget * 0.93);
-  const maxWords = Math.ceil(wordTarget * 1.07);
-  const temps = { aggressive: 0.95, standard: 0.85, subtle: 0.72 };
-
-  // Find the Aiden example closest in length — this is the structural template
-  const template = findClosestByLength(inputText);
-  const templateBreakdown = sentenceBreakdown(template.answer);
-
+// ─── Build shared style block used in all prompts ────────────────────────────
+function buildStyleBlock(humanSamples = []) {
   const allAidenText = AIDEN_EXAMPLES.map((e, i) =>
-    `[HUMAN EXAMPLE ${i + 1}]\n${e.answer}`
+    `[HUMAN EXAMPLE ${i + 1} — Q: "${e.question}"]\n${e.answer}`
   ).join('\n\n');
 
-  const allAIText = AI_EXAMPLES.map(e =>
-    `[${e.label}]\n${e.sample}`
-  ).join('\n\n');
+  const aiText = AI_EXAMPLES.map(e => `[${e.label}]\n${e.sample}`).join('\n\n');
 
-  const redditBlock = humanExamples.length > 0
-    ? '\n━━━ REAL HUMAN WRITING ON THIS TOPIC (Reddit) ━━━\n' +
-      pickExamples(humanExamples, EXAMPLE_COUNT_REWRITE, EXAMPLE_MAX_CHARS)
-        .map((e, i) => `[${i + 1}] "${e.text}"`)
-        .join('\n')
+  const samplesBlock = humanSamples.length > 0
+    ? '\n━━━ ADDITIONAL REAL HUMAN WRITING (from dataset) ━━━\n' +
+      shuffle(humanSamples).slice(0, 8).map((s, i) => `[${i+1}] "${s.slice(0, 300)}"`).join('\n')
     : '';
 
-  const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
-
-  const system = `You are rewriting text. Your goal is to make the output match the sentence structure of the human examples below, not the AI examples.
-
-━━━ HUMAN WRITING — IMITATE THIS ━━━
+  return `━━━ REAL HUMAN WRITING — IMITATE THIS VOICE ━━━
 ${allAidenText}
-${redditBlock}
+${samplesBlock}
 
 ━━━ AI WRITING — DO NOT SOUND LIKE THIS ━━━
-${allAIText}
-
-━━━ YOUR STRUCTURAL TEMPLATE ━━━
-This is how a real human wrote a similar-length piece. Match this sentence-by-sentence rhythm:
-${templateBreakdown}
-
-For each sentence in the input:
-1. Express the same idea
-2. Use roughly the same word count as the corresponding template sentence
-3. Write it the way a real person would say it — direct, plain, confident
-4. NOT the way an AI would explain it — no qualifiers, no hedges, no academic words
-
-━━━ WORD COUNT — STRICT ━━━
-Input: ${wordTarget} words. Output MUST be ${minWords}–${maxWords} words.
-Every idea in the input stays. No new ideas added.
-
-━━━ NEVER DO ━━━
-• Comma-lists of concepts: "X, Y, and Z"
-• Em dashes for effect: "Look around—" / "Here's the thing—"
-• "Here's what..." or "Here's why..." setups
-• Hedging: arguably, it could be said, one might argue
-• Acknowledging the other side
-• Numbered structure: First... Second... Third...
-• Long sentences over 20 words
-• Any of these words: ${BANNED.slice(0, 30).join(', ')}
-
-${userStyleBlock}
-
-OUTPUT: Return ONLY the rewritten text. No explanation, no preamble.`;
-
-  const result = await mistral(apiKey, system, `Rewrite this text:\n\n${inputText}`, temps[strength], 3000);
-  return await hardTrim(apiKey, result, wordTarget);
+${aiText}`;
 }
 
-// ─── PASS 4: Splice real human sentences ─────────────────────────────────────
-async function spliceHumanSentences(apiKey, text, humanExamples, originalWordCount) {
-  if (humanExamples.length === 0) return text;
-
-  const humanSentences = humanExamples
-    .flatMap(e => (e.text.match(/[^.!?]+[.!?]+/g) || []))
-    .map(s => s.trim())
-    .filter(s => {
-      const words = s.split(/\s+/).length;
-      return words >= 8 && words <= 30;
-    })
-    .filter(s => {
-      const lower = s.toLowerCase();
-      return !lower.includes('subreddit') && !lower.includes('upvote') &&
-             !lower.includes('downvote') && !lower.includes(' op ') &&
-             !lower.includes('edit:') && !lower.match(/^(lol|lmao|omg|wtf)/i);
-    });
-
-  if (humanSentences.length < 5) return text;
-
-  const selected = shuffle(humanSentences).slice(0, EXAMPLE_COUNT_SPLICE);
-  const minWords = Math.floor(originalWordCount * 0.93);
-  const maxWords = Math.ceil(originalWordCount * 1.07);
-
-  const system = `Replace the 3 most AI-sounding sentences in this text with real human-written sentences from the list below.
-
-Real human sentences to use:
-${selected.map((s, i) => `${i + 1}. "${s}"`).join('\n')}
-
-Rules:
-1. Find the 3 smoothest, most predictable, most AI-sounding sentences in the text
-2. Replace each with a sentence from the list above that fits contextually
-3. You may lightly adapt (change a noun, adjust tense) — keep 75%+ of the original wording
-4. Do not change any other sentences
-5. Keep output between ${minWords} and ${maxWords} words
-
-Output ONLY the edited text.`;
-
-  const result = await mistral(apiKey, system, `Edit this text:\n\n${text}`, 0.45, 3000);
-  return await hardTrim(apiKey, result, originalWordCount);
-}
-
-// ─── PASS 5: Scrub ────────────────────────────────────────────────────────────
-async function surgicalScrub(apiKey, text, humanExamples, originalWordCount) {
-  const { banned, aiOpeners } = scoreText(text);
-  const minWords = Math.floor(originalWordCount * 0.93);
-  const maxWords = Math.ceil(originalWordCount * 1.07);
-
-  const problems = [];
-  if (banned.length > 0) problems.push(`Replace these banned words with casual alternatives: ${banned.join(', ')}`);
-  if (aiOpeners.length > 0) problems.push(`Rewrite these AI sentence openers:\n${aiOpeners.slice(0, 4).map(s => `  • "${s}"`).join('\n')}`);
-
-  const redditReminder = humanExamples.length > 0
-    ? '\nReal human writing on this topic:\n' +
-      pickExamples(humanExamples, EXAMPLE_COUNT_SCRUB, EXAMPLE_MAX_CHARS_FAST)
-        .map((e, i) => `[${i + 1}] "${e.text}"`).join('\n')
-    : '';
-
-  const system = `Make targeted fixes to this text. Every fix is a swap — never add new content.
-
-⚠️ WORD COUNT: text is ${wc(text)} words. Must stay ${minWords}–${maxWords} words.
-
-PROBLEMS TO FIX:
-${problems.length > 0 ? problems.join('\n') : 'No critical problems — apply the improvements below.'}
-
-ALWAYS FIX:
-1. Find 3 sentences where every word is the obvious expected choice — replace 2-3 words in each with less predictable but natural alternatives
-2. Find 2 sentences that explain something — rewrite them to state it instead
-3. Find any sentence that hedges or maps perspectives — make it take a clear side
-4. Find any list of 3+ things separated by commas — restructure into separate sentences
-${redditReminder}
-
-Output ONLY the fixed text.`;
-
-  const result = await mistral(apiKey, system, `Fix this text:\n\n${text}`, 0.68, 3000);
-  return await hardTrim(apiKey, result, originalWordCount);
-}
-
-// ─── PASS 6: Verify ───────────────────────────────────────────────────────────
-async function verifyAndFix(apiKey, text, originalText, humanExamples) {
-  const { banned, aiOpeners, burst } = scoreText(text);
-  const originalWordCount = wc(originalText);
-  const minWords = Math.floor(originalWordCount * 0.93);
-  const maxWords = Math.ceil(originalWordCount * 1.07);
-
-  // Use closest Aiden example as the comparison point
-  const template = findClosestByLength(text);
-  const templateBreakdown = sentenceBreakdown(template.answer);
-
-  const system = `Compare this text against real human writing and fix anything still AI-sounding.
-
-REAL HUMAN WRITING FOR COMPARISON (sentence by sentence):
-${templateBreakdown}
-
-TEXT TO CHECK:
-${sentenceBreakdown(text)}
-
-⚠️ WORD COUNT: Must stay ${minWords}–${maxWords} words (currently ${wc(text)}). Swap only, never add.
-
-For each sentence in the text, compare it to the corresponding human sentence:
-- Is it roughly the same length?
-- Is it as direct and confident?
-- Does it state rather than explain?
-- Does it use plain words, not academic vocabulary?
-
-Fix any sentence that differs significantly from how the human writes.
-
-Also fix:
-- Banned words still present: ${banned.length > 0 ? banned.join(', ') : 'none — check anyway'}
-- AI openers: ${aiOpeners.length > 0 ? aiOpeners.slice(0,3).map(s=>s.trim()).join(' | ') : 'none — check anyway'}
-- Burstiness is ${burst} ${burst < 0.45 ? '— too uniform, vary sentence lengths more' : '— ok'}
-
-Output ONLY the corrected text.`;
-
-  const result = await mistral(apiKey, system, text, 0.72, 3000);
-  return await hardTrim(apiKey, result, originalWordCount);
-}
-
-// ─── PASS 7: Word count ───────────────────────────────────────────────────────
-async function enforceWordCount(apiKey, text, originalWordCount) {
-  const current = wc(text);
-  const min = Math.floor(originalWordCount * 0.93);
-  const max = Math.ceil(originalWordCount * 1.07);
-  if (current >= min && current <= max) return text;
-
-  if (current > max) {
-    const system = `Trim this text from ${current} to between ${min} and ${max} words.
-Cut filler, shorten long sentences, remove repeated ideas. Keep all unique arguments.
-Output ONLY the trimmed text.`;
-    return await mistral(apiKey, system, text, 0.3, max * 3);
-  } else {
-    const system = `Expand this text from ${current} to between ${min} and ${max} words.
-Add a concrete detail to 1-2 existing points. Do not add new arguments.
-Output ONLY the expanded text.`;
-    return await mistral(apiKey, system, text, 0.5, max * 3);
-  }
-}
-
-// ─── User style block ─────────────────────────────────────────────────────────
 function buildUserStyleBlock(profile) {
   if (!profile) return '';
   const rules = [];
@@ -449,176 +256,305 @@ function buildUserStyleBlock(profile) {
   if (s.includes('very casual')) rules.push('Very casual tone');
   if (s.includes('formal')) rules.push('More formal tone');
   if (profile.examples?.length) {
-    return `\n━━ THIS USER'S OWN WRITING STYLE ━━\n${profile.examples.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n${rules.map(r => `• ${r}`).join('\n')}`;
+    return `\n━━ USER'S OWN WRITING ━━\n${profile.examples.map((s, i) => `${i+1}. ${s}`).join('\n')}\n${rules.map(r => `• ${r}`).join('\n')}`;
   }
   return rules.length ? `\n━━ STYLE NOTES ━━\n${rules.map(r => `• ${r}`).join('\n')}` : '';
 }
 
-// ─── Answer as Aiden ──────────────────────────────────────────────────────────
-export async function answerAsAiden(apiKey, question, styleProfile, onProgress) {
-  const log = (step, msg) => {
-    console.log(`  [${step}] ${msg}`);
-    if (onProgress) onProgress({ step, msg });
-  };
+// ═══════════════════════════════════════════════════════════════════
+//  HUMANIZE PIPELINE — 7 passes
+// ═══════════════════════════════════════════════════════════════════
 
-  log('1/3', 'Finding closest human example...');
+// ─── Pass 1: Extract topic ────────────────────────────────────────────────────
+async function pass1_extractTopic(apiKey, text) {
+  const raw = await mistral(apiKey,
+    `Extract the core topic and a short search phrase from this text.
+Return JSON only, no other text:
+{"topic":"short topic name","keywords":"3 to 5 words total"}
+Keywords must be 3-5 words total. One phrase only.`,
+    text.slice(0, 500), 0.1, 100);
+  try {
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    if (parsed.keywords && parsed.keywords.split(/\s+/).length > 6) {
+      parsed.keywords = parsed.keywords.split(/\s+/).slice(0, 5).join(' ');
+    }
+    return parsed;
+  } catch {
+    return { topic: 'general topic', keywords: 'essay writing' };
+  }
+}
 
-  const closest = findClosestAidenExample(question);
-  const closestBreakdown = sentenceBreakdown(closest.answer);
-  const allAidenText = AIDEN_EXAMPLES.map((e, i) =>
-    `[HUMAN EXAMPLE ${i + 1} — Q: "${e.question}"]\n${e.answer}`
-  ).join('\n\n');
-  const allAIText = AI_EXAMPLES.map(e => `[${e.label}]\n${e.sample}`).join('\n\n');
+// ─── Pass 2: Fetch human examples ────────────────────────────────────────────
+// (HuggingFace dataset — no Reddit)
+
+// ─── Pass 3: Rewrite using structural imitation ───────────────────────────────
+async function pass3_rewrite(apiKey, inputText, humanSamples, strength, styleProfile) {
+  const wordTarget = wc(inputText);
+  const minWords = Math.floor(wordTarget * 0.93);
+  const maxWords = Math.ceil(wordTarget * 1.07);
+  const temps = { aggressive: 0.95, standard: 0.85, subtle: 0.72 };
+
+  const template = findClosestByLength(inputText);
+  const templateBreakdown = sentenceBreakdown(template.answer);
+  const styleBlock = buildStyleBlock(humanSamples);
   const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
 
-  log('1/3', `Using "${closest.question}" as structural template`);
+  const result = await mistral(apiKey, `${styleBlock}
 
-  // THE KEY APPROACH:
-  // Don't ask the model to "write like a human" — that produces humanizer output.
-  // Instead: show the exact sentence-by-sentence structure of a real human answer,
-  // and ask it to substitute new content into each slot.
-  // This produces structurally identical output to the real human answer.
+━━━ YOUR STRUCTURAL TEMPLATE ━━━
+This is how a real human structured a similar piece — sentence by sentence:
+${templateBreakdown}
 
-  const system = `You are going to answer a question by substituting new content into the exact sentence structure of a real human answer.
+For each sentence in the input text, express the same idea but:
+- Match the template sentence's length (±3 words)
+- Write it the way the real human above would say it
+- State things directly — don't explain or hedge
+- Use plain casual words, not academic vocabulary
 
-━━━ THE HUMAN ANSWER TO COPY STRUCTURALLY ━━━
-Real person's answer to a similar question: "${closest.question}"
+━━━ WORD COUNT — STRICT ━━━
+Input: ${wordTarget} words. Output MUST be ${minWords}–${maxWords} words. No new ideas.
 
-Their answer broken into sentences:
-${closestBreakdown}
-
-━━━ YOUR JOB ━━━
-Answer the new question using the SAME sentence structure — same number of sentences, same sentence lengths, same sentence types (declarative, question, analogy, restatement).
-
-For each sentence slot:
-- Keep the same LENGTH (±3 words)
-- Keep the same TYPE (if it's a short declarative, write a short declarative; if it's a rhetorical question, write a rhetorical question)
-- Keep the same FUNCTION (opener = state conclusion; middle = explain/give example; closer = restate)
-- Put in new content relevant to the new question
-
-━━━ ALL HUMAN EXAMPLES FOR VOCABULARY REFERENCE ━━━
-${allAidenText}
-
-━━━ AI WRITING — DO NOT PRODUCE THIS ━━━
-${allAIText}
-
-━━━ HARD RULES ━━━
-• Never write a sentence longer than 20 words
-• Never use: however, moreover, furthermore, nuanced, leverage, complex, multifaceted, arguably, incumbent
-• Never list things: "X, Y, and Z" as multi-concept lists
-• Never end with a caveat or "the answer depends"
-• Never acknowledge the other side has valid points
-• Never use em dashes dramatically
+━━━ NEVER DO ━━━
+• "Here's what..." or "Here's why..." setups
+• Hedging: arguably, it could be said, one might argue
+• Numbered structure: First... Second... Third...
+• Long sentences over 20 words
+• Em dashes for effect
+• These words: ${BANNED.slice(0, 25).join(', ')}
 
 ${userStyleBlock}
 
-OUTPUT: Return ONLY the answer. No preamble, no labels, no explanation.`;
+OUTPUT: Return ONLY the rewritten text.`,
+    `Rewrite this text:\n\n${inputText}`,
+    temps[strength], 3000);
 
-  const draft = await mistral(apiKey, system,
-    `New question: "${question}"\n\nWrite the answer now, matching the sentence structure of the human example above.`,
-    0.88, 800);
-
-  log('2/3', 'Comparing draft to human answer sentence by sentence...');
-
-  // Pass 2: Explicit sentence-by-sentence comparison
-  // This catches any drift from the human structure in the draft
-  const draftSentences = getSentences(draft);
-  const humanSentences = getSentences(closest.answer);
-
-  const compareSystem = `Compare the draft answer to the human answer sentence by sentence and fix any sentences that diverged from the human's structure.
-
-HUMAN ANSWER (sentence by sentence):
-${humanSentences.map((s, i) => `H${i + 1} [${s.split(/\s+/).length} words]: "${s}"`).join('\n')}
-
-DRAFT ANSWER (sentence by sentence):
-${draftSentences.map((s, i) => `D${i + 1} [${s.split(/\s+/).length} words]: "${s}"`).join('\n')}
-
-For each draft sentence, check:
-1. Is it within 3 words of the human sentence's length? If not — shorten or expand.
-2. Is it as direct and confident as the human sentence? If not — remove hedges and qualifiers.
-3. Does it use plain vocabulary like the human? If not — replace academic words with plain ones.
-4. Does it STATE things (like the human) rather than EXPLAIN them (like AI)? Fix if needed.
-
-Make only the fixes needed. Keep the content and argument.
-Output ONLY the corrected full answer.`;
-
-  const final = await mistral(apiKey, compareSystem, draft, 0.45, 800);
-
-  log('3/3', 'Done');
-
-  return {
-    text: final,
-    scores: {
-      bannedWordsFound: countBannedWords(final),
-      aiOpenersFound: countAIOpeners(final).length,
-      burstiness: calcBurstiness(final),
-      wordCount: wc(final)
-    }
-  };
+  return await hardTrim(apiKey, result, wordTarget);
 }
 
-// ─── MAIN PIPELINE ────────────────────────────────────────────────────────────
-export async function humanize(apiKey, inputText, strength, styleProfile, onProgress) {
+// ─── Pass 4: Splice real human sentences ─────────────────────────────────────
+async function pass4_splice(apiKey, text, humanSamples, originalWordCount) {
+  const sentences = humanSamples
+    .flatMap(s => (s.match(/[^.!?]+[.!?]+/g) || []))
+    .map(s => s.trim())
+    .filter(s => {
+      const w = s.split(/\s+/).length;
+      return w >= 8 && w <= 30;
+    })
+    .filter(s => s.length > 20);
 
+  if (sentences.length < 5) {
+    console.log('  → Not enough human sentences for splicing — skipping');
+    return text;
+  }
+
+  const selected = shuffle(sentences).slice(0, 15);
+  const minWords = Math.floor(originalWordCount * 0.93);
+  const maxWords = Math.ceil(originalWordCount * 1.07);
+
+  const result = await mistral(apiKey,
+    `Replace the 3 most AI-sounding sentences in this text with real human-written sentences from the list below.
+
+Real human sentences:
+${selected.map((s, i) => `${i+1}. "${s}"`).join('\n')}
+
+Rules:
+1. Find the 3 smoothest, most formulaic sentences
+2. Replace each with a sentence from the list that fits contextually
+3. Lightly adapt if needed — keep 75%+ of the original wording
+4. Do not change any other sentences
+5. Keep output between ${minWords} and ${maxWords} words
+
+Output ONLY the edited text.`,
+    `Edit this text:\n\n${text}`,
+    0.45, 3000);
+
+  return await hardTrim(apiKey, result, originalWordCount);
+}
+
+// ─── Pass 5: Scrub AI patterns ────────────────────────────────────────────────
+async function pass5_scrub(apiKey, text, humanSamples, originalWordCount) {
+  const { banned, aiOpeners } = scoreText(text);
+  const minWords = Math.floor(originalWordCount * 0.93);
+  const maxWords = Math.ceil(originalWordCount * 1.07);
+
+  const problems = [];
+  if (banned.length > 0) problems.push(`Replace banned words: ${banned.join(', ')}`);
+  if (aiOpeners.length > 0) problems.push(`Rewrite AI openers:\n${aiOpeners.slice(0, 4).map(s => `  • "${s}"`).join('\n')}`);
+
+  const sample = humanSamples.length > 0
+    ? '\nReal human writing for reference:\n' + shuffle(humanSamples).slice(0, 3).map((s, i) => `[${i+1}] "${s.slice(0, 200)}"`).join('\n')
+    : '';
+
+  const result = await mistral(apiKey,
+    `Fix specific AI patterns in this text. Every change is a swap — never add content.
+
+⚠️ WORD COUNT: ${wc(text)} words. Must stay ${minWords}–${maxWords} words.
+
+${problems.length > 0 ? 'PROBLEMS:\n' + problems.join('\n') : 'No critical problems — apply improvements below.'}
+
+ALWAYS FIX:
+1. Find 3 sentences where every word is the obvious expected choice — replace 2-3 words with less predictable but natural alternatives
+2. Find 2 sentences that explain something — rewrite them to state it instead
+3. Find any hedging sentence — make it take a clear side
+4. Find any comma list of 3+ concepts — restructure into separate sentences
+${sample}
+
+Output ONLY the fixed text.`,
+    `Fix this text:\n\n${text}`,
+    0.68, 3000);
+
+  return await hardTrim(apiKey, result, originalWordCount);
+}
+
+// ─── Pass 6: Verify ───────────────────────────────────────────────────────────
+async function pass6_verify(apiKey, text, originalText, humanSamples) {
+  const { banned, aiOpeners, burst } = scoreText(text);
+  const originalWordCount = wc(originalText);
+  const minWords = Math.floor(originalWordCount * 0.93);
+  const maxWords = Math.ceil(originalWordCount * 1.07);
+
+  const template = findClosestByLength(text);
+
+  const result = await mistral(apiKey,
+    `Compare this text against real human writing sentence by sentence and fix anything still AI-sounding.
+
+REAL HUMAN WRITING (structural reference):
+${sentenceBreakdown(template.answer)}
+
+⚠️ WORD COUNT: Must stay ${minWords}–${maxWords} words (currently ${wc(text)}). Swap only.
+
+For each sentence, check:
+- Is it direct and confident like the human? Fix if not.
+- Does it use plain words? Fix academic vocabulary.
+- Does it STATE rather than EXPLAIN? Fix if explaining.
+
+Also fix:
+- Banned words: ${banned.length > 0 ? banned.join(', ') : 'none'}
+- AI openers: ${aiOpeners.length > 0 ? aiOpeners.slice(0,3).map(s=>s.trim()).join(' | ') : 'none'}
+- Sentence variety: burstiness=${burst}${burst < 0.45 ? ' (TOO LOW — vary lengths more)' : ' (ok)'}
+
+Output ONLY the corrected text.`,
+    text, 0.72, 3000);
+
+  return await hardTrim(apiKey, result, originalWordCount);
+}
+
+// ─── Pass 7: Word count fix ───────────────────────────────────────────────────
+async function pass7_wordCount(apiKey, text, originalWordCount) {
+  const current = wc(text);
+  const min = Math.floor(originalWordCount * 0.93);
+  const max = Math.ceil(originalWordCount * 1.07);
+  if (current >= min && current <= max) return text;
+
+  if (current > max) {
+    return await mistral(apiKey,
+      `Trim this text from ${current} to between ${min} and ${max} words. Cut filler, shorten sentences, remove repeated ideas. Keep all unique arguments. Output ONLY the trimmed text.`,
+      text, 0.3, max * 3);
+  } else {
+    return await mistral(apiKey,
+      `Expand this text from ${current} to between ${min} and ${max} words. Add a concrete detail to 1-2 existing points. Do not add new arguments. Output ONLY the expanded text.`,
+      text, 0.5, max * 3);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  MAIN HUMANIZE EXPORT
+// ═══════════════════════════════════════════════════════════════════
+export async function humanize(apiKey, inputText, strength, styleProfile, onProgress) {
   const log = (step, msg) => {
-    console.log(`  [${step}] ${msg}`);
+    const full = `[${step}] ${msg}`;
+    console.log(' ' + full);
     if (onProgress) onProgress({ step, msg });
   };
 
+  if (!apiKey) throw new Error('No API key provided');
+  if (!inputText || !inputText.trim()) throw new Error('No input text provided');
+
   const originalWordCount = wc(inputText);
+  console.log(`\n=== HUMANIZE START === ${originalWordCount} words ===`);
 
-  log('1/7', `Analyzing topic... (original: ${originalWordCount} words)`);
-  const topicData = await extractTopic(apiKey, inputText);
-  log('1/7', `Topic: "${topicData.topic}" | Keywords: "${topicData.keywords}"`);
-
-  log('2/7', `Scraping Reddit for: "${topicData.keywords}"...`);
-  let humanExamples = [];
+  // Pass 1
+  log('1/7', `Analyzing topic... (${originalWordCount} words)`);
+  let topicData;
   try {
-    const scraped = await gatherHumanExamples(topicData.keywords, inputText);
-    humanExamples = scraped.human || [];
-    log('2/7', `Found ${humanExamples.length} real human examples`);
+    topicData = await pass1_extractTopic(apiKey, inputText);
+    log('1/7', `Topic: "${topicData.topic}" | Keywords: "${topicData.keywords}"`);
   } catch (e) {
-    log('2/7', `Scraping failed (${e.message}) — continuing`);
+    log('1/7', `Topic extraction failed: ${e.message} — using defaults`);
+    topicData = { topic: 'general', keywords: 'essay writing' };
   }
 
+  // Pass 2
+  log('2/7', 'Loading human writing examples...');
+  let humanSamples = [];
+  try {
+    humanSamples = await getHumanSamples();
+    log('2/7', `Loaded ${humanSamples.length} human writing samples`);
+  } catch (e) {
+    log('2/7', `Examples load failed: ${e.message} — continuing without`);
+  }
+
+  // Pass 3
   log('3/7', 'Rewriting using human sentence structure...');
-  let result = await rewriteHuman(apiKey, inputText, humanExamples, strength, styleProfile);
-  let scores = scoreText(result);
-  let currentWC = wc(result);
-  log('3/7', `After rewrite: ${currentWC} words (target: ${originalWordCount}) | burstiness=${scores.burst} | banned=${scores.banned.length} | ai-openers=${scores.aiOpeners.length}`);
+  let result;
+  try {
+    result = await pass3_rewrite(apiKey, inputText, humanSamples, strength || 'aggressive', styleProfile);
+    const s = scoreText(result);
+    log('3/7', `After rewrite: ${wc(result)} words (target: ${originalWordCount}) | burstiness=${s.burst} | banned=${s.banned.length} | ai-openers=${s.aiOpeners.length}`);
+  } catch (e) {
+    throw new Error(`Pass 3 (rewrite) failed: ${e.message}`);
+  }
 
+  // Pass 4
   log('4/7', 'Splicing real human sentences...');
-  result = await spliceHumanSentences(apiKey, result, humanExamples, originalWordCount);
-  scores = scoreText(result);
-  currentWC = wc(result);
-  log('4/7', `After splice: ${currentWC} words | burstiness=${scores.burst} | banned=${scores.banned.length}`);
+  try {
+    result = await pass4_splice(apiKey, result, humanSamples, originalWordCount);
+    const s = scoreText(result);
+    log('4/7', `After splice: ${wc(result)} words | burstiness=${s.burst} | banned=${s.banned.length}`);
+  } catch (e) {
+    log('4/7', `Splice failed: ${e.message} — continuing`);
+  }
 
+  // Pass 5
   log('5/7', 'Scrubbing remaining AI patterns...');
-  result = await surgicalScrub(apiKey, result, humanExamples, originalWordCount);
-  scores = scoreText(result);
-  currentWC = wc(result);
-  log('5/7', `After scrub: ${currentWC} words | burstiness=${scores.burst} | banned=${scores.banned.length} | ai-openers=${scores.aiOpeners.length}`);
+  try {
+    result = await pass5_scrub(apiKey, result, humanSamples, originalWordCount);
+    const s = scoreText(result);
+    log('5/7', `After scrub: ${wc(result)} words | burstiness=${s.burst} | banned=${s.banned.length} | ai-openers=${s.aiOpeners.length}`);
+  } catch (e) {
+    log('5/7', `Scrub failed: ${e.message} — continuing`);
+  }
 
+  // Pass 6
   log('6/7', 'Verification pass...');
-  result = await verifyAndFix(apiKey, result, inputText, humanExamples);
-  scores = scoreText(result);
-  currentWC = wc(result);
-  log('6/7', `After verify: ${currentWC} words | burstiness=${scores.burst} | banned=${scores.banned.length}`);
+  try {
+    result = await pass6_verify(apiKey, result, inputText, humanSamples);
+    const s = scoreText(result);
+    log('6/7', `After verify: ${wc(result)} words | burstiness=${s.burst} | banned=${s.banned.length}`);
+  } catch (e) {
+    log('6/7', `Verify failed: ${e.message} — continuing`);
+  }
 
+  // Pass 7
+  const currentWC = wc(result);
   const min = Math.floor(originalWordCount * 0.93);
   const max = Math.ceil(originalWordCount * 1.07);
-  currentWC = wc(result);
-
   if (currentWC < min || currentWC > max) {
-    log('7/7', `Word count fixing (${currentWC} → target ${originalWordCount})...`);
-    result = await enforceWordCount(apiKey, result, originalWordCount);
-    log('7/7', `Final: ${wc(result)} words`);
+    log('7/7', `Word count out of range (${currentWC}, need ${min}–${max}) — correcting...`);
+    try {
+      result = await pass7_wordCount(apiKey, result, originalWordCount);
+      log('7/7', `Final: ${wc(result)} words`);
+    } catch (e) {
+      log('7/7', `Word count fix failed: ${e.message}`);
+    }
   } else {
     log('7/7', `Word count OK: ${currentWC}`);
   }
 
-  scores = scoreText(result);
+  console.log(`=== HUMANIZE DONE === ${wc(result)} words ===\n`);
 
+  const scores = scoreText(result);
   return {
     text: result,
     scores: {
@@ -626,11 +562,108 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
       bannedWordsFound: scores.banned,
       aiOpenersFound: scores.aiOpeners.length,
       fragments: scores.frags,
-      examplesUsed: humanExamples.length,
+      examplesUsed: humanSamples.length,
       originalWordCount,
       outputWordCount: wc(result),
       wordCountDelta: Math.round((wc(result) - originalWordCount) / originalWordCount * 100) + '%',
-      humanExampleSources: [...new Set(humanExamples.map(e => e.source))].slice(0, 8)
+      humanExampleSources: ['HuggingFace human dataset']
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ANSWER AS ME EXPORT
+// ═══════════════════════════════════════════════════════════════════
+export async function answerAsAiden(apiKey, question, styleProfile, onProgress) {
+  const log = (step, msg) => {
+    console.log(`  [${step}] ${msg}`);
+    if (onProgress) onProgress({ step, msg });
+  };
+
+  if (!apiKey) throw new Error('No API key provided');
+  if (!question || !question.trim()) throw new Error('No question provided');
+
+  console.log(`\n=== ANSWER START === "${question}" ===`);
+
+  log('1/3', 'Finding closest human example...');
+  const closest = findClosestAidenExample(question);
+  log('1/3', `Using "${closest.question}" as structural template`);
+
+  const closestBreakdown = sentenceBreakdown(closest.answer);
+  const humanSentences = getSentences(closest.answer);
+  const allAidenText = AIDEN_EXAMPLES.map((e, i) =>
+    `[HUMAN EXAMPLE ${i+1} — Q: "${e.question}"]\n${e.answer}`
+  ).join('\n\n');
+  const allAIText = AI_EXAMPLES.map(e => `[${e.label}]\n${e.sample}`).join('\n\n');
+  const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
+
+  log('1/3', 'Writing answer using sentence structure...');
+  const draft = await mistral(apiKey,
+    `You are going to answer a question by substituting new content into the exact sentence structure of a real human answer.
+
+━━━ THE HUMAN ANSWER TO COPY STRUCTURALLY ━━━
+Real person answered: "${closest.question}"
+
+Their answer sentence by sentence:
+${closestBreakdown}
+
+━━━ YOUR JOB ━━━
+Answer the NEW question using the SAME sentence structure:
+- Same number of sentences
+- Each sentence same LENGTH as the corresponding human sentence (±3 words)  
+- Same TYPE (declarative → declarative, question → question, analogy → analogy)
+- New content relevant to the new question
+
+━━━ ALL HUMAN EXAMPLES FOR VOICE REFERENCE ━━━
+${allAidenText}
+
+━━━ AI WRITING — NEVER PRODUCE THIS ━━━
+${allAIText}
+
+━━━ HARD RULES ━━━
+• Never write a sentence longer than 20 words
+• Never use: however, moreover, furthermore, nuanced, leverage, complex, multifaceted, arguably
+• Never list concepts: "X, Y, and Z"
+• Never end with a caveat or "it depends"
+• Never acknowledge the other side has valid points
+
+${userStyleBlock}
+
+OUTPUT: Return ONLY the answer. No preamble.`,
+    `New question: "${question}"\n\nWrite the answer now, matching the sentence-by-sentence structure of the human example above.`,
+    0.88, 800);
+
+  log('2/3', 'Comparing draft to human answer sentence by sentence...');
+
+  const draftSentences = getSentences(draft);
+  const compareResult = await mistral(apiKey,
+    `Compare the draft answer to the human answer sentence by sentence. Fix any sentences that diverged from the human's structure.
+
+HUMAN ANSWER (sentence by sentence):
+${humanSentences.map((s, i) => `H${i+1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n')}
+
+DRAFT ANSWER (sentence by sentence):
+${draftSentences.map((s, i) => `D${i+1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n')}
+
+For each draft sentence check:
+1. Is it within 3 words of the human sentence's length? If not — fix.
+2. Is it as direct and confident as the human? If not — remove hedges.
+3. Does it use plain vocabulary? If not — replace academic words.
+4. Does it STATE things rather than EXPLAIN them? Fix if needed.
+
+Keep the content and argument. Output ONLY the corrected full answer.`,
+    draft, 0.45, 800);
+
+  log('3/3', 'Done');
+  console.log(`=== ANSWER DONE ===\n`);
+
+  return {
+    text: compareResult,
+    scores: {
+      bannedWordsFound: countBannedWords(compareResult),
+      aiOpenersFound: countAIOpeners(compareResult).length,
+      burstiness: calcBurstiness(compareResult),
+      wordCount: wc(compareResult)
     }
   };
 }
