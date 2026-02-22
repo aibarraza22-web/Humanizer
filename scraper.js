@@ -1,20 +1,23 @@
 // ═══════════════════════════════════════════════════════════════════
 //  scraper.js — fetches REAL human writing from Reddit & forums
-//  No auth needed. Uses Reddit's public .json API + cheerio parsing.
+//  No auth needed. Uses Reddit's public .json API + Pushshift fallback
+//  (Railway/datacenter IPs often get blocked by Reddit directly)
 // ═══════════════════════════════════════════════════════════════════
 
 import fetch from 'node-fetch';
-import * as cheerio from 'cheerio';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const HEADERS = { 'User-Agent': UA, 'Accept': 'application/json' };
 
-// ── Reddit public JSON API (no auth, no rate-limit issues at low volume) ──────
+// ── Reddit public JSON API ─────────────────────────────────────────────────────
 async function fetchRedditSearch(query, limit = 15) {
   const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&sort=relevance&type=link&limit=${limit}&restrict_sr=false`;
   try {
     const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.log(`  → Reddit search returned ${res.status} — likely blocked`);
+      return [];
+    }
     const data = await res.json();
     const posts = data?.data?.children || [];
     return posts
@@ -28,7 +31,10 @@ async function fetchRedditSearch(query, limit = 15) {
         url: `https://reddit.com${p.permalink}`
       }))
       .filter(p => p.text.length > 100);
-  } catch { return []; }
+  } catch (e) {
+    console.log(`  → Reddit search failed: ${e.message}`);
+    return [];
+  }
 }
 
 async function fetchSubredditPosts(subreddit, sort = 'top', limit = 10) {
@@ -72,6 +78,56 @@ async function fetchRedditComments(postUrl, limit = 20) {
   } catch { return []; }
 }
 
+// ── Pushshift fallback (works from datacenter IPs when Reddit blocks) ──────────
+async function fetchPushshift(query, limit = 20) {
+  const url = `https://api.pullpush.io/reddit/search/submission/?q=${encodeURIComponent(query)}&size=${limit}&is_self=true`;
+  try {
+    console.log(`  → Trying Pushshift/PullPush fallback...`);
+    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) });
+    if (!res.ok) {
+      console.log(`  → Pushshift returned ${res.status}`);
+      return [];
+    }
+    const data = await res.json();
+    const posts = data?.data || [];
+    return posts
+      .filter(p => p.selftext && p.selftext.length > 120 && p.selftext !== '[removed]' && p.selftext !== '[deleted]')
+      .map(p => ({
+        source: `r/${p.subreddit}`,
+        title: p.title || '',
+        text: cleanText(p.selftext),
+        score: p.score || 0,
+        url: p.full_link || ''
+      }))
+      .filter(p => p.text.length > 100);
+  } catch (e) {
+    console.log(`  → Pushshift failed: ${e.message}`);
+    return [];
+  }
+}
+
+// ── Pushshift comment search ───────────────────────────────────────────────────
+async function fetchPushshiftComments(query, limit = 20) {
+  const url = `https://api.pullpush.io/reddit/search/comment/?q=${encodeURIComponent(query)}&size=${limit}`;
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const comments = data?.data || [];
+    return comments
+      .filter(c => c.body && c.body.length > 80 && c.body !== '[removed]' && c.body !== '[deleted]')
+      .map(c => ({
+        source: `r/${c.subreddit} comment`,
+        text: cleanText(c.body),
+        score: c.score || 0
+      }))
+      .filter(c => c.text.length > 80);
+  } catch (e) {
+    console.log(`  → Pushshift comments failed: ${e.message}`);
+    return [];
+  }
+}
+
 // ── Pick subreddits relevant to the topic ─────────────────────────────────────
 function pickSubreddits(topic) {
   const t = topic.toLowerCase();
@@ -95,7 +151,6 @@ function pickSubreddits(topic) {
     if (keys.some(k => t.includes(k))) extra.push(...subs);
   }
 
-  // Always include changemyview — some of the best structured human argumentation on Reddit
   return [...new Set([...always, 'changemyview', ...extra.slice(0, 4)])].slice(0, 6);
 }
 
@@ -105,24 +160,52 @@ export async function gatherHumanExamples(topicKeywords, rawText) {
 
   const results = { human: [], sources: [] };
 
-  // Run scrapes in parallel for speed
+  // Try direct Reddit API first (works locally, often blocked on servers)
   const [searchResults, cmvPosts] = await Promise.all([
     fetchRedditSearch(topicKeywords, 20),
     fetchSubredditPosts('changemyview', 'top', 8),
   ]);
 
-  // Pick relevant subreddits and fetch from them
   const subs = pickSubreddits(topicKeywords);
   const subResults = await Promise.all(
     subs.slice(0, 4).map(sub => fetchSubredditPosts(sub, 'top', 6))
   );
 
-  // Combine all raw posts
-  const allPosts = [
-    ...searchResults,
-    ...cmvPosts,
-    ...subResults.flat()
-  ];
+  let allPosts = [...searchResults, ...cmvPosts, ...subResults.flat()];
+
+  // ── FALLBACK: If Reddit blocked us (datacenter IP), use Pushshift ─────────
+  if (allPosts.length < 5) {
+    console.log(`  → Direct Reddit returned only ${allPosts.length} posts — switching to Pushshift fallback`);
+    const [pushshiftPosts, pushshiftComments] = await Promise.all([
+      fetchPushshift(topicKeywords, 25),
+      fetchPushshiftComments(topicKeywords, 25),
+    ]);
+
+    // Also try a broader search with just the first 2 keywords
+    const broadKeywords = topicKeywords.split(' ').slice(0, 2).join(' ');
+    let broadPosts = [];
+    if (broadKeywords !== topicKeywords) {
+      broadPosts = await fetchPushshift(broadKeywords, 15);
+    }
+
+    allPosts = [...allPosts, ...pushshiftPosts, ...broadPosts];
+
+    // Add comments as individual "posts"
+    for (const c of pushshiftComments.filter(c => scoreHumanQuality(c.text) > 2).slice(0, 10)) {
+      const paras = extractBestParagraphs(c.text, 1);
+      for (const para of paras) {
+        results.human.push({ source: c.source, text: para });
+        results.sources.push(c.source);
+      }
+    }
+
+    console.log(`  → Pushshift returned ${pushshiftPosts.length + broadPosts.length} posts, ${pushshiftComments.length} comments`);
+  }
+
+  if (allPosts.length === 0) {
+    console.log(`  → No examples found from any source — pipeline will continue without Reddit examples`);
+    return results;
+  }
 
   // Score by relevance and quality
   const keywords = topicKeywords.toLowerCase().split(/\s+/).filter(w => w.length > 3);
@@ -145,19 +228,26 @@ export async function gatherHumanExamples(topicKeywords, rawText) {
     })
     .slice(0, 12);
 
-  // For the best posts, also grab their top comments
-  const commentFetches = await Promise.all(
-    top.slice(0, 3)
-      .filter(p => p.url)
-      .map(p => fetchRedditComments(p.url, 15))
-  );
+  // For the best posts, also grab their top comments (only if we have URLs from direct Reddit)
+  const postsWithUrls = top.slice(0, 3).filter(p => p.url && p.url.includes('reddit.com'));
+  if (postsWithUrls.length > 0) {
+    const commentFetches = await Promise.all(
+      postsWithUrls.map(p => fetchRedditComments(p.url, 15))
+    );
+    const topComments = commentFetches.flat()
+      .filter(c => scoreHumanQuality(c.text) > 3)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
 
-  const topComments = commentFetches.flat()
-    .filter(c => scoreHumanQuality(c.text) > 3)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
+    for (const comment of topComments) {
+      const paras = extractBestParagraphs(comment.text, 1);
+      for (const para of paras) {
+        results.human.push({ source: comment.source, text: para });
+      }
+    }
+  }
 
-  // Extract clean paragraphs from top posts + comments
+  // Extract clean paragraphs from top posts
   for (const post of top.slice(0, 8)) {
     const paras = extractBestParagraphs(post.text, 2);
     for (const para of paras) {
@@ -165,14 +255,8 @@ export async function gatherHumanExamples(topicKeywords, rawText) {
       results.sources.push(post.source);
     }
   }
-  for (const comment of topComments) {
-    const paras = extractBestParagraphs(comment.text, 1);
-    for (const para of paras) {
-      results.human.push({ source: comment.source, text: para });
-    }
-  }
 
-  console.log(`  → Got ${results.human.length} real human paragraphs from Reddit`);
+  console.log(`  → Got ${results.human.length} real human paragraphs`);
   return results;
 }
 
@@ -181,26 +265,23 @@ function scoreHumanQuality(text) {
   if (!text || text.length < 80) return 0;
   let score = 0;
 
-  // Good signals
   if (/\bI (think|feel|believe|realized|found|learned|noticed)\b/i.test(text)) score += 2;
   if (/\b(honestly|actually|basically|literally|kind of|sort of)\b/i.test(text)) score += 2;
-  if (/\b(tbh|ngl|imo|imho|fwiw|iirc)\b/i.test(text)) score += 3; // reddit-speak
-  if (/\.\.\./g.test(text)) score += 1; // ellipsis
+  if (/\b(tbh|ngl|imo|imho|fwiw|iirc)\b/i.test(text)) score += 3;
+  if (/\.\.\./g.test(text)) score += 1;
   if (/\b(my|our|we|us)\b/i.test(text)) score += 1;
   if (/[?!]{2}/.test(text)) score += 1;
   if (/\b(but|and|so|because|since|though|although)\b/i.test(text)) score += 1;
-  if (text.includes("'")) score += 1; // contractions
-  if (/\b\d+\b/.test(text)) score += 1; // numbers are human
-  if (text.split('\n').length > 1) score += 1; // paragraph breaks
+  if (text.includes("'")) score += 1;
+  if (/\b\d+\b/.test(text)) score += 1;
+  if (text.split('\n').length > 1) score += 1;
 
-  // Bad signals (AI-like)
   if (/\b(furthermore|moreover|additionally|nevertheless|consequently)\b/i.test(text)) score -= 3;
   if (/\b(it is important to|it is worth noting|it should be noted)\b/i.test(text)) score -= 3;
   if (/\b(multifaceted|nuanced|comprehensive|holistic|paradigm)\b/i.test(text)) score -= 2;
   if (/^(In conclusion|To summarize|In summary)/i.test(text)) score -= 4;
   if (/^(The [a-z]+ of [a-z]+)/i.test(text)) score -= 2;
 
-  // Length sweet spot
   const wds = text.split(/\s+/).length;
   if (wds >= 60 && wds <= 400) score += 2;
   if (wds < 30) score -= 2;
@@ -225,10 +306,10 @@ function extractBestParagraphs(text, maxParas = 2) {
 // ── Clean text: strip markdown, URLs, excessive whitespace ───────────────────
 function cleanText(text) {
   return text
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // markdown links → text
-    .replace(/https?:\/\/\S+/g, '')           // bare URLs
-    .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1') // bold/italic
-    .replace(/#{1,6}\s/g, '')                  // headers
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
+    .replace(/#{1,6}\s/g, '')
     .replace(/&amp;/g, '&').replace(/&gt;/g, '>').replace(/&lt;/g, '<')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/\s{2,}/g, ' ')
