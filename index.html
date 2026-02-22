@@ -38,14 +38,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:20p
 .panel.active{display:flex;flex-direction:column;gap:16px;padding-top:18px}
 
 /* steps */
-.steps{display:flex;align-items:center}
+.steps{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
 .step{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:0.64rem;color:#555580;transition:color 0.3s}
 .step.active{color:var(--accent)}
 .step.done{color:var(--green)}
 .sdot{width:20px;height:20px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:0.58rem;font-weight:700;flex-shrink:0;transition:all 0.3s}
 .step.active .sdot{border-color:var(--accent);color:var(--accent);background:var(--glow)}
 .step.done .sdot{border-color:var(--green);background:rgba(80,250,123,0.1);color:var(--green)}
-.sline{width:20px;height:1px;background:var(--border);margin:0 2px;flex-shrink:0}
+.sline{width:14px;height:1px;background:var(--border);margin:0 2px;flex-shrink:0}
 
 /* editors */
 .egrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -157,10 +157,10 @@ select:focus{border-color:var(--accent)}
   </div>
   <div class="key-row">
     <div class="key-wrap">
-      <label>Groq Key</label>
-      <input type="password" id="apiKey" placeholder="gsk_... · free at console.groq.com"/>
+      <label>Mistral Key</label>
+      <input type="password" id="apiKey" placeholder="Enter your Mistral API key..."/>
     </div>
-    <span class="key-hint"><a href="https://console.groq.com" target="_blank">Get a free key →</a></span>
+    <span class="key-hint"><a href="https://console.mistral.ai" target="_blank">Get a key → console.mistral.ai</a></span>
   </div>
 </header>
 
@@ -181,9 +181,13 @@ select:focus{border-color:var(--accent)}
       <div class="sline"></div>
       <div class="step" id="step3"><div class="sdot">3</div><span>Rewrite</span></div>
       <div class="sline"></div>
-      <div class="step" id="step4"><div class="sdot">4</div><span>Scrub</span></div>
+      <div class="step" id="step4"><div class="sdot">4</div><span>Splice</span></div>
       <div class="sline"></div>
-      <div class="step" id="step5"><div class="sdot">5</div><span>Verify</span></div>
+      <div class="step" id="step5"><div class="sdot">5</div><span>Scrub</span></div>
+      <div class="sline"></div>
+      <div class="step" id="step6"><div class="sdot">6</div><span>Verify</span></div>
+      <div class="sline"></div>
+      <div class="step" id="step7"><div class="sdot">7</div><span>Finalize</span></div>
     </div>
 
     <div class="egrid">
@@ -222,7 +226,7 @@ select:focus{border-color:var(--accent)}
 
     <div class="log-panel" id="logPanel"></div>
 
-    <div class="status" id="statusEl"><div class="s-dot"></div><span id="statusMsg">Ready — server must be running (node server.js)</span></div>
+    <div class="status" id="statusEl"><div class="s-dot"></div><span id="statusMsg">Ready — paste text and enter your Mistral API key to begin</span></div>
 
     <div class="ex-panel" id="exPanel">
       <div class="ex-title">Real Reddit examples used this run</div>
@@ -310,8 +314,8 @@ select:focus{border-color:var(--accent)}
   <!-- TIPS TAB -->
   <div id="tab-tips" class="panel">
     <div class="tips-grid">
-      <div class="tip"><div class="tip-n">01</div><h3>How it works</h3><p>It scrapes Reddit live for real posts on your topic, then uses those as examples. The model sees what real humans wrote — not AI imitations — before rewriting your text.</p></div>
-      <div class="tip"><div class="tip-n">02</div><h3>5-pass pipeline</h3><p>Topic extraction → Reddit scraping → Rewrite → Surgical scrub → Verification. Each pass catches what the previous missed. The verification pass has the model check its own output.</p></div>
+      <div class="tip"><div class="tip-n">01</div><h3>How it works</h3><p>Scrapes Reddit live for real posts on your topic, then uses those as examples and directly splices real human sentences into the output. The model sees what real humans wrote — not AI imitations — before rewriting your text.</p></div>
+      <div class="tip"><div class="tip-n">02</div><h3>7-pass pipeline</h3><p>Topic → Reddit scrape → Rewrite → Splice real sentences → Surgical scrub → Verification → Word count fix. Each pass catches what the previous missed. The splice pass is the key one — it inserts genuinely human-written sentences GPTZero can't flag.</p></div>
       <div class="tip"><div class="tip-n">03</div><h3>Set your writing style</h3><p>Paste a sample of your real writing before running. Even a few sentences makes a big difference — it extracts your rhythm and applies it as hard rules.</p></div>
       <div class="tip"><div class="tip-n">04</div><h3>Make a few edits yourself</h3><p>Change 2–3 sentences to exactly how you'd write them. Genuinely human text that no AI can replicate. Biggest single improvement you can make.</p></div>
       <div class="tip"><div class="tip-n">05</div><h3>Burstiness score</h3><p>Human writing scores 0.5+. Below 0.4 means sentence lengths are too uniform — GPTZero's #1 signal. The pipeline enforces this but check the score after.</p></div>
@@ -348,25 +352,27 @@ function setStatus(msg, type='') {
   document.getElementById('statusMsg').textContent = msg;
   document.getElementById('statusEl').className = 'status ' + type;
 }
+
+// 7 steps total
 function setStep(n) {
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= 7; i++) {
     const el = document.getElementById('step' + i);
+    if (!el) continue;
     el.classList.remove('active','done');
     if (i < n) el.classList.add('done');
     else if (i === n) el.classList.add('active');
   }
 }
 
+// Map the [X/7] step tag from pipeline logs to a step number
 const stepForMsg = msg => {
-  if (msg.includes('1/5')) return 1;
-  if (msg.includes('2/5')) return 2;
-  if (msg.includes('3/5')) return 3;
-  if (msg.includes('4/5')) return 4;
-  if (msg.includes('5/5')) return 5;
+  const m = msg.match(/(\d)\/7/);
+  if (m) return parseInt(m[1]);
   return null;
 };
 
-const progForStep = n => [0, 12, 25, 52, 72, 88][n] || 0;
+// Progress bar percentages for each of the 7 steps
+const progForStep = n => [0, 8, 18, 35, 50, 65, 80, 92][n] || 0;
 
 function addLog(msg, state='active') {
   const panel = document.getElementById('logPanel');
@@ -395,7 +401,7 @@ async function run() {
   const strength = document.getElementById('strength').value;
   const btn = document.getElementById('runBtn');
 
-  if (!apiKey) return setStatus('Enter your Groq API key.', 'err');
+  if (!apiKey) return setStatus('Enter your Mistral API key.', 'err');
   if (!inputText) return setStatus('Paste some text first.', 'err');
   if (wc(inputText) > 1400) return setStatus('Too long — split into chunks under 1400 words.', 'err');
 
@@ -408,7 +414,7 @@ async function run() {
   document.getElementById('logPanel').classList.remove('show');
 
   showProg(); setProg(3); setStep(1);
-  setStatus('Running 5-pass pipeline — scraping Reddit, rewriting, scrubbing...', 'working');
+  setStatus('Running 7-pass pipeline — scraping Reddit, rewriting, splicing, scrubbing...', 'working');
 
   try {
     const response = await fetch('/humanize', {
@@ -468,8 +474,8 @@ async function run() {
             document.getElementById('exPanel').className = 'ex-panel show';
           }
 
-          setStep(5); hideProg();
-          setStatus('Done — ' + s.examplesUsed + ' Reddit examples used, ' + (5 - (s.burstiness >= 0.5 ? 0 : 1)) + '/5 passes clean. Make 1–2 of your own edits for best results.', 'ok');
+          setStep(7); hideProg();
+          setStatus('Done — ' + s.examplesUsed + ' Reddit examples used. Make 1–2 of your own edits for best results.', 'ok');
           addLog('Complete ✓', 'done');
 
         } else if (event.type === 'error') {
