@@ -901,6 +901,16 @@ function copyOut() {
   setStatus('Copied to clipboard.', 'ok');
   setTimeout(() => setStatus('Ready'), 2200);
 }
+
+// Ensure inline onclick handlers work across hosting environments.
+window.switchTab = switchTab;
+window.switchMethod = switchMethod;
+window.run = run;
+window.copyOut = copyOut;
+window.saveFromSample = saveFromSample;
+window.saveFromQuiz = saveFromQuiz;
+window.clearStyle = clearStyle;
+
 </script>
 </body>
 </html>
