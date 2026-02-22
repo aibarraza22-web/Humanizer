@@ -1,22 +1,14 @@
-// ═══════════════════════════════════════════════════════════════════
-//  pipeline.js — Humanizer pipeline using Mistral AI
-//
-//  Core insight: GPTZero detects AI because writing lacks a person
-//  behind it. AI explains things. Humans react to things.
-//  The transformation: turn every explanatory sentence into a
-//  reaction or observation from someone with a real point of view.
-//
-//  Datasets:
-//  - Aiden's 6 answers: voice model + structural templates
-//  - HuggingFace human stories: real specific details that anchor
-//    text in reality (names, numbers, places, moments)
-// ═══════════════════════════════════════════════════════════════════
+// pipeline.js — Humanizer pipeline
+// Core problem: AI writes dramatically and journalistically.
+// Humans write plainly and personally.
+// The fix: every pass enforces plain personal writing, not dramatic writing.
 
 import fetch from 'node-fetch';
 
 const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MODEL = 'mistral-large-latest';
 
+// Aiden's real answers — the gold standard for what we want to produce
 const AIDEN_EXAMPLES = [
   {
     question: "How is AI changing the way startups compete in finance?",
@@ -44,14 +36,23 @@ const AIDEN_EXAMPLES = [
   }
 ];
 
+// This is a REAL example of 86% human output on a finance/AI topic.
+// The pipeline produced this on an earlier run. Study it carefully —
+// this is exactly the style we need to produce every time.
+const PROVEN_HUMAN_EXAMPLE = {
+  input: `Finance, startups, and AI are kind of colliding right now in a way that feels real, not just hype. In finance, AI helps with things like predicting markets, spotting fraud, managing risk, and analyzing huge amounts of data way faster than any human could. But honestly, the bigger story is how startups are using AI to build smarter financial tools from scratch. A small team can now create a trading model, a budgeting app, or a risk engine that used to require a giant bank with hundreds of employees. That changes everything. It means speed and creativity matter more than size.`,
+  output: `Finance, startups, and AI are all coming together right now. In finance, AI can help predict markets and analyze lots of data a lot faster than any human ever could. Even more, startups are using AI to build financial tools all by themselves. Someone can now just create a trading model, or a budgeting app, or a risk engine that used to require a giant bank that used to take hundreds of people. That changes everything and now speed and creativity from one person mean so much more than hundreds of people used to. Although, AI does not do this on its own. It still needs the human to push it and manage it. When someone with real financial knowledge gets a hold of these new AI tools. They can be unstoppable, stronger than hundreds of employees just a few months ago. This is not about getting rid of people, but about giving ambitious startup founders the ability to build.`,
+  gptzero_score: "86% human"
+};
+
 const AI_EXAMPLES = [
   {
-    label: "ChatGPT — DO NOT write like this",
+    label: "ChatGPT — 100% AI detected",
     sample: `Artificial intelligence is basically compressing time and lowering barriers. That's the core shift. In finance especially, where speed, information, and risk modeling decide who wins, AI lets small teams compete with institutions that used to need hundreds of analysts and massive infrastructure. First, analysis is getting automated at scale. Second, prediction quality is becoming the edge. Third, personalization is becoming scalable.`
   },
   {
-    label: "Claude — DO NOT write like this",
-    sample: `AI is reshaping startup competition in financial services in some pretty fundamental ways. Here's what's driving the shift: Leveling the playing field on data — Traditionally, incumbents had a massive moat in the form of decades of customer transaction data. The honest caveat is that AI also introduces new risks — model bias in lending, explainability challenges for regulators, and systemic fragility if many institutions rely on similar underlying models.`
+    label: "Over-humanized AI — ALSO 100% AI detected (dramatic journalist style)",
+    sample: `Not long ago, only hedge funds with armies of quants and access to supercomputers like IBM's Watson could move markets with precision. Now? Numerai's crowd-sourced models, built by data scientists from over 100 countries, leave them in the dust—AI in finance isn't just a buzzword; it actually works. It calls the shots on trades, flags fraudulent transactions in milliseconds, and hedges risk before the coffee in your mug even gets cold.`
   }
 ];
 
@@ -98,7 +99,7 @@ async function mistral(apiKey, system, user, temp = 0.85, maxTokens = 2048) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(`Mistral API error: ${data.message || data.error?.message || JSON.stringify(data).slice(0,200)}`);
-  if (!data.choices?.[0]) throw new Error(`Unexpected Mistral response: ${JSON.stringify(data).slice(0,200)}`);
+  if (!data.choices?.[0]) throw new Error(`Unexpected response: ${JSON.stringify(data).slice(0,200)}`);
   return data.choices[0].message.content.trim();
 }
 
@@ -115,7 +116,6 @@ async function loadHFSentences() {
     clearTimeout(t);
     if (!res.ok) throw new Error(`HF ${res.status}`);
     const data = await res.json();
-
     const sentences = (data.rows || [])
       .map(r => r.row?.Human_story || '')
       .filter(s => s.length > 50)
@@ -123,17 +123,11 @@ async function loadHFSentences() {
       .map(s => s.trim())
       .filter(s => {
         const w = s.split(/\s+/).length;
-        if (w < 6 || w > 30) return false;
-        // Keep only sentences with real specific details
-        return /\b\d+\b/.test(s) ||
-               /\b[A-Z][a-z]+ [A-Z][a-z]+\b/.test(s) ||
-               /\b(I |my |we |our )/i.test(s) ||
-               /\b(said|told|found|saw|heard|felt|knew|watched|learned)\b/i.test(s);
+        return w >= 5 && w <= 18; // SHORT sentences only
       })
       .filter(s => !BANNED.some(b => s.toLowerCase().includes(b)) && !AI_OPENERS.some(p => p.test(s)));
-
     cachedHFSentences = sentences;
-    console.log(`  → Loaded ${sentences.length} specific human sentences from HuggingFace`);
+    console.log(`  → Loaded ${sentences.length} human sentences from HuggingFace`);
     return sentences;
   } catch (e) {
     console.log(`  → HF failed: ${e.message}`);
@@ -144,6 +138,7 @@ async function loadHFSentences() {
 // ─── Utils ────────────────────────────────────────────────────────────────────
 const wc = t => t?.trim() ? t.trim().split(/\s+/).length : 0;
 const getSentences = t => (t.match(/[^.!?]+[.!?]+/g) || [t]).map(s => s.trim()).filter(Boolean);
+const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
 
 function calcBurstiness(text) {
   const lens = getSentences(text).map(s => s.split(/\s+/).length).filter(l => l > 0);
@@ -157,13 +152,15 @@ const countBannedWords = text => BANNED.filter(w => text.toLowerCase().includes(
 const countAIOpeners = text => getSentences(text).filter(s => AI_OPENERS.some(p => p.test(s)));
 const countFragments = text => getSentences(text).filter(s => s.split(/\s+/).length <= 6).length;
 const scoreText = text => ({ burst: calcBurstiness(text), banned: countBannedWords(text), aiOpeners: countAIOpeners(text), frags: countFragments(text) });
-const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
-const sentenceBreakdown = text => getSentences(text).map((s,i) => `  S${i+1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n');
+
+function sentenceBreakdown(text) {
+  return getSentences(text).map((s,i) => `  S${i+1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n');
+}
 
 function detectInputType(text) {
   const lower = text.toLowerCase();
   const analysisScore = (lower.match(/\b(research|study|studies|data|evidence|according|analysis|found|shows|results|percent|million|billion|report|survey)\b/g) || []).length;
-  const opinionScore = (lower.match(/\b(should|must|I |we |our |believe|think|argue|reason|wrong|right|bad|good)\b/g) || []).length;
+  const opinionScore = (lower.match(/\b(should|must|I |we |our |believe|think|wrong|right|bad|good)\b/g) || []).length;
   return analysisScore > opinionScore + 2 ? 'analysis' : 'opinion';
 }
 
@@ -180,14 +177,18 @@ function findClosestAidenExample(question) {
 
 function findClosestByLength(inputText) {
   const n = getSentences(inputText).length;
-  return AIDEN_EXAMPLES.reduce((best, ex) => Math.abs(getSentences(ex.answer).length - n) < Math.abs(getSentences(best.answer).length - n) ? ex : best);
+  return AIDEN_EXAMPLES.reduce((best, ex) =>
+    Math.abs(getSentences(ex.answer).length - n) < Math.abs(getSentences(best.answer).length - n) ? ex : best
+  );
 }
 
 async function hardTrim(apiKey, text, targetWC) {
   if (!text?.trim()) throw new Error('Empty text in hardTrim');
   const current = wc(text);
-  if (current <= Math.ceil(targetWC * 1.15)) return text;
-  return await mistral(apiKey, `Trim from ${current} to ~${targetWC} words. Remove filler, keep all arguments. Output ONLY the trimmed text.`, text, 0.3, targetWC * 3);
+  if (current <= Math.ceil(targetWC * 1.12)) return text;
+  return await mistral(apiKey,
+    `Trim from ${current} to ~${targetWC} words. Remove filler sentences. Keep all arguments. Output ONLY the trimmed text.`,
+    text, 0.3, targetWC * 3);
 }
 
 function buildUserStyleBlock(profile) {
@@ -201,207 +202,225 @@ function buildUserStyleBlock(profile) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  PASS 1: Analyze input
+//  THE CORE REWRITE SYSTEM PROMPT
+//  This is the most important prompt. Every word matters.
+// ═══════════════════════════════════════════════════════════════════
+function buildCoreSystemPrompt(allAidenText, wordTarget, minWords, maxWords, extraGuidance, userStyleBlock) {
+  return `You are rewriting text to pass AI detection. Your output must look like it was typed by a real student, not generated by AI.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROOF THAT THIS APPROACH WORKS — 86% HUMAN ON GPTZERO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+This INPUT (AI-written) → this OUTPUT (86% human) is a REAL result.
+Study it. Your output must look like this OUTPUT, not the INPUT.
+
+INPUT (AI):
+"${PROVEN_HUMAN_EXAMPLE.input}"
+
+OUTPUT that scored 86% HUMAN:
+"${PROVEN_HUMAN_EXAMPLE.output}"
+
+WHY THE OUTPUT PASSES:
+• Short plain sentences: "Finance, startups, and AI are all coming together right now."
+• Casual filler: "lots of", "a lot faster", "all by themselves", "just", "even more"
+• Slight imperfection: "a giant bank that used to take hundreds of people" (slightly off grammar)
+• Repetition for emphasis: "stronger than hundreds of employees just a few months ago"
+• Personal framing: "Although, AI does not do this on its own. It still needs the human."
+• No em dashes, no colon lists, no dramatic phrases, no "the real play is..."
+
+WHY AI WRITING FAILS EVEN WHEN "HUMANIZED":
+"Not long ago, only hedge funds with armies of quants and access to supercomputers like IBM's Watson could move markets with precision. Now? Numerai's crowd-sourced models...leave them in the dust—AI in finance isn't just a buzzword; it actually works. It calls the shots on trades, flags fraudulent transactions in milliseconds, and hedges risk before the coffee in your mug even gets cold."
+THIS IS 100% AI DETECTED. Why? Long complex sentences. Dramatic phrases. Em dashes. Journalist-style colons. "The coffee in your mug" = AI trying too hard.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MORE REAL HUMAN EXAMPLES TO COPY THE VOICE FROM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${allAidenText}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ABSOLUTE RULES — BREAKING ANY OF THESE = AI DETECTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RULE 1 — NO LONG SENTENCES
+Every sentence must be under 18 words. Count them. If a sentence has 19+ words, split it.
+
+RULE 2 — NO EM DASHES
+Never use —. Not once. Not for any reason.
+
+RULE 3 — NO COLON LISTS
+Never use : to introduce a list. "trading bots that...budgeting apps that...risk engines that..." = AI.
+
+RULE 4 — NO DRAMATIC PHRASES
+No "the real play is", no "hedges risk before the coffee gets cold", no "leave them in the dust",
+no "it actually works", no "Now?", no rhetorical one-word sentences.
+
+RULE 5 — NO JOURNALISTIC STYLE
+Do not write like a magazine article or news story. Write like a real person talking.
+
+RULE 6 — USE PLAIN CASUAL WORDS
+"lots of" not "numerous". "way faster" not "significantly faster". "can't" not "cannot".
+"a lot" not "substantially". "used to" not "historically". "now" not "currently".
+
+RULE 7 — WORD COUNT
+Input: ${wordTarget} words. Output MUST be ${minWords}–${maxWords} words.
+
+${extraGuidance}
+
+${userStyleBlock}
+
+OUTPUT: Return ONLY the rewritten text. Nothing else.`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  PASS 1: Analyze
 // ═══════════════════════════════════════════════════════════════════
 async function pass1_analyze(apiKey, text) {
   try {
     const raw = await mistral(apiKey,
-      `Analyze this text. Return JSON only, no other text:
-{"topic":"2-4 word topic","type":"opinion or analysis","position":"the main claim in one sentence"}`,
-      text.slice(0, 500), 0.1, 120);
+      `Analyze this text. Return JSON only:
+{"topic":"2-4 word topic","type":"opinion or analysis"}`,
+      text.slice(0, 400), 0.1, 80);
     return JSON.parse(raw.replace(/```json|```/g, '').trim());
   } catch {
-    return { topic: 'general topic', type: detectInputType(text), position: 'makes a claim' };
+    return { topic: 'general topic', type: detectInputType(text) };
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  PASS 3: Rewrite — turn explanations into reactions
+//  PASS 3: Core rewrite
 // ═══════════════════════════════════════════════════════════════════
 async function pass3_rewrite(apiKey, inputText, inputType, strength, styleProfile) {
   const wordTarget = wc(inputText);
   const minWords = Math.floor(wordTarget * 0.93);
   const maxWords = Math.ceil(wordTarget * 1.07);
-  const temps = { aggressive: 0.95, standard: 0.85, subtle: 0.72 };
-  const template = findClosestByLength(inputText);
-  const allAidenText = AIDEN_EXAMPLES.map((e,i) => `[HUMAN ${i+1}]\n${e.answer}`).join('\n\n');
-  const allAIText = AI_EXAMPLES.map(e => `[${e.label}]\n${e.sample}`).join('\n\n');
+  const temps = { aggressive: 0.92, standard: 0.82, subtle: 0.70 };
+
+  const allAidenText = AIDEN_EXAMPLES.map((e,i) => `[HUMAN EXAMPLE ${i+1}]\n"${e.answer}"`).join('\n\n');
   const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
 
-  const analysisGuidance = `━━━ THE CORE TRANSFORMATION FOR ANALYSIS TEXT ━━━
-This input explains things analytically. You must rewrite it so a person with opinions is behind every sentence.
+  const extraGuidance = inputType === 'analysis'
+    ? `EXTRA FOR ANALYSIS TEXT:
+This text explains things. You need to reframe explanations as personal reactions.
+"AI reduces barriers" → "Anyone can do this now. The barriers are gone."
+"Studies show 40% gains" → "The productivity numbers are real. We're talking 40% gains."
+Every sentence should sound like someone telling you something they find interesting.`
+    : `EXTRA FOR OPINION TEXT:
+Take a clear side. State it at the start. Repeat it at the end.
+Use "I" and "we" naturally. Say what you actually think, directly.`;
 
-Transform each explanatory sentence into a reaction or observation:
-BEFORE (AI/analysis): "AI reduces barriers by automating data analysis and lowering infrastructure costs."
-AFTER (human reaction): "Anyone can do this now. You used to need a whole team just to analyze the data."
+  const systemPrompt = buildCoreSystemPrompt(allAidenText, wordTarget, minWords, maxWords, extraGuidance, userStyleBlock);
 
-BEFORE: "Studies show productivity increases of 40% when AI tools are integrated into workflows."
-AFTER: "The productivity numbers are insane. We're talking 40% gains just from plugging in the right tools."
-
-BEFORE: "This technology enables smaller teams to compete with larger institutions."
-AFTER: "A three-person startup can now compete with Goldman Sachs. That's not an exaggeration."
-
-The idea stays. The framing changes from reporting a fact to REACTING to a fact.
-Every sentence needs a person behind it — someone who finds this interesting, alarming, or obvious.`;
-
-  const opinionGuidance = `━━━ STRUCTURAL TEMPLATE ━━━
-Match this sentence-by-sentence rhythm from a real human:
-${sentenceBreakdown(template.answer)}`;
-
-  const result = await mistral(apiKey,
-    `You are rewriting AI text to sound like it was written by a real person with opinions and a point of view.
-
-━━━ REAL HUMAN WRITING — THIS IS YOUR TARGET ━━━
-${allAidenText}
-
-━━━ AI WRITING — THIS IS WHAT YOU ARE FIXING ━━━
-${allAIText}
-
-━━━ WHAT MAKES WRITING FEEL HUMAN ━━━
-Human writing has a person behind it. The writer is not explaining — they are reacting.
-They have opinions. They find things obvious, alarming, interesting, or wrong.
-They use "I" and "we" naturally. They repeat things for emphasis. They make it personal.
-
-AI writing is smooth and complete. It explains mechanisms, maps perspectives, hedges.
-Nobody is behind AI writing. That's what GPTZero detects.
-
-${inputType === 'analysis' ? analysisGuidance : opinionGuidance}
-
-━━━ WORD COUNT — STRICT ━━━
-Input: ${wordTarget} words. Output MUST be ${minWords}–${maxWords} words.
-Keep every idea from the input. Do not add new ideas. Reframe existing ones.
-
-━━━ NEVER DO ━━━
-• Numbered structure: First... Second... Third...
-• "Here's what..." or "Here's why..." setups
-• Hedging: arguably, it could be said, one might argue
-• Acknowledging the other side has valid points
-• Sentences over 20 words
-• These words: ${BANNED.slice(0,25).join(', ')}
-• Em dashes for dramatic effect
-
-${userStyleBlock}
-
-OUTPUT: Return ONLY the rewritten text.`,
-    `Rewrite this text:\n\n${inputText}`,
+  const result = await mistral(apiKey, systemPrompt,
+    `Rewrite this text following ALL rules above:\n\n${inputText}`,
     temps[strength], 3000);
 
   return await hardTrim(apiKey, result, wordTarget);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  PASS 4: Inject real specific examples that make text feel alive
+//  PASS 4: Spot-fix long sentences and dramatic phrases
 // ═══════════════════════════════════════════════════════════════════
-// Adds 1-2 real world specific examples (companies, people, events)
-// that support the argument already being made.
-// Word count is controlled: for every sentence added, shorten something
-// else. Net change must be zero.
-// Framing must be Aiden-style — casual and direct, not journalistic.
-async function pass4_injectLife(apiKey, text, hfSentences, originalWordCount) {
+// This pass specifically hunts for the patterns that cause AI detection
+// even after rewriting: long sentences, em dashes, dramatic phrases.
+async function pass4_fixDramatic(apiKey, text, originalWordCount) {
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
 
-  // Use HF sentences only as a signal for what real specifics exist —
-  // not as content to copy. The model should use its own knowledge
-  // of real companies/events relevant to the topic.
-  const hfSignal = hfSentences.length > 0
-    ? `\nFor reference, here are real human sentences with specific details (style only — do not copy content):\n` +
-      shuffle(hfSentences).slice(0, 8).map((s,i) => `${i+1}. "${s}"`).join('\n')
-    : '';
+  const sentences = getSentences(text);
+  const longSentences = sentences.filter(s => s.split(/\s+/).length > 17);
+  const hasEmDash = text.includes('—');
+  const dramaticPhrases = [
+    'the real play', 'leave them in the dust', 'before the coffee',
+    'gets cold', 'Now?', 'it actually works', 'the game has changed',
+    'isn\'t just a', 'isn\'t just about', 'it\'s about giving',
+    'outrun the big guys', 'levels the playing field', 'ruthless',
+    'unprecedented scale', 'eerie precision', 'in the dust'
+  ];
+  const foundDramatic = dramaticPhrases.filter(p => text.toLowerCase().includes(p.toLowerCase()));
+
+  const problems = [];
+  if (longSentences.length > 0) problems.push(`LONG SENTENCES (over 17 words — split each into 2 shorter ones):\n${longSentences.map(s => `  • "${s}"`).join('\n')}`);
+  if (hasEmDash) problems.push(`EM DASHES found — replace every — with a period or comma`);
+  if (foundDramatic.length > 0) problems.push(`DRAMATIC PHRASES — replace with plain casual language:\n${foundDramatic.map(p => `  • "${p}"`).join('\n')}`);
+
+  if (problems.length === 0) return text; // nothing to fix
 
   const result = await mistral(apiKey,
-    `You are adding 1-2 real specific examples to make this text feel grounded and alive.
+    `Fix ONLY the specific problems listed below. Do not change anything else.
+Word count must stay ${minWords}–${maxWords} words (currently ${wc(text)}).
 
-WHAT TO DO:
-1. Read the argument the text is making
-2. Find 1-2 places where a real specific example would strengthen the point
-3. Add a brief real-world example — a real company, a real person, a real event that actually supports what's being said
-4. Frame it the way Aiden would: casual, direct, first-person reaction — NOT like a journalist reporting facts
+PROBLEMS TO FIX:
+${problems.join('\n\n')}
 
-AIDEN'S STYLE FOR EXAMPLES:
-• "Take Renaissance Technologies — their AI fund has been making insane returns for decades."
-• "Look at what JPMorgan did with their AI trading desk. They basically replaced analysts with algorithms."
-• NOT: "Renaissance Technologies, founded in 1982, employs quantitative models to..."
-
-STRICT WORD COUNT RULE:
-Current: ${wc(text)} words. Target: ${minWords}–${maxWords} words.
-For every new sentence you add, you MUST shorten or cut something elsewhere.
-The total output must be within the target range. This is non-negotiable.
-
-ONLY add examples that:
-• Are genuinely real and accurate (real companies, real events)
-• Directly support the specific point being made
-• Can be stated in 1-2 short sentences max
-• You are confident are true — if unsure, skip it
-${hfSignal}
-
-Output ONLY the updated text.`,
-    text, 0.75, 3000);
-
-  return await hardTrim(apiKey, result, originalWordCount);
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  PASS 5: Scrub — kill anything written for completeness
-// ═══════════════════════════════════════════════════════════════════
-// AI writes for completeness: it includes a sentence because the
-// paragraph "needs" a transition, a conclusion, a caveat.
-// Humans write for conviction: every sentence exists because they
-// actually think that thing, not because the structure demands it.
-async function pass5_scrub(apiKey, text, originalWordCount) {
-  const { banned, aiOpeners } = scoreText(text);
-  const minWords = Math.floor(originalWordCount * 0.93);
-  const maxWords = Math.ceil(originalWordCount * 1.07);
-
-  const result = await mistral(apiKey,
-    `Fix AI patterns in this text. Every change is a swap — never add content.
-
-WORD COUNT: Must stay ${minWords}–${maxWords} words (currently ${wc(text)}).
-
-FIND AND FIX:
-1. Banned words still present: ${banned.length > 0 ? banned.join(', ') : 'check anyway'} — replace with plain casual words
-2. AI sentence openers: ${aiOpeners.length > 0 ? aiOpeners.slice(0,3).map(s=>'"'+s.trim()+'"').join(', ') : 'check anyway'} — rewrite to start differently
-3. Any sentence written for "completeness" not conviction — sentences that exist to transition or round out the paragraph rather than because the writer actually thinks that. Cut or replace them.
-4. Any sentence that explains HOW something works — rewrite as a reaction to THAT something works
-5. Any sentence that hedges or maps multiple perspectives — make it take a side
+HOW TO FIX:
+• Long sentence: split into 2 short ones. Each under 15 words.
+• Em dash: replace with period. Start new sentence.
+• Dramatic phrase: replace with plain casual equivalent.
+  "leave them in the dust" → "beat them"
+  "eerie precision" → "really good accuracy"
+  "unprecedented scale" → "a huge scale"
+  "levels the playing field" → "lets anyone compete"
 
 Output ONLY the fixed text.`,
-    text, 0.68, 3000);
+    text, 0.45, 3000);
 
   return await hardTrim(apiKey, result, originalWordCount);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  PASS 6: Verify — sentence-by-sentence check
+//  PASS 5: Scrub banned words and AI openers
 // ═══════════════════════════════════════════════════════════════════
-async function pass6_verify(apiKey, text, originalText) {
-  const { banned, aiOpeners, burst } = scoreText(text);
-  const originalWordCount = wc(originalText);
+async function pass5_scrub(apiKey, text, originalWordCount) {
+  const { banned, aiOpeners } = scoreText(text);
+  if (banned.length === 0 && aiOpeners.length === 0) return text;
+
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
-  const template = findClosestByLength(text);
 
   const result = await mistral(apiKey,
-    `Final check: compare this text against real human writing and fix the last remaining AI patterns.
+    `Fix ONLY these specific problems. Do not change anything else.
+Word count must stay ${minWords}–${maxWords} words.
 
-REAL HUMAN WRITING FOR COMPARISON:
-${sentenceBreakdown(template.answer)}
+${banned.length > 0 ? `BANNED WORDS — replace with plain casual words:\n${banned.map(w => `  • "${w}"`).join('\n')}` : ''}
+${aiOpeners.length > 0 ? `AI SENTENCE OPENERS — rewrite these sentence openings:\n${aiOpeners.slice(0,4).map(s => `  • "${s.trim().slice(0,60)}..."`).join('\n')}` : ''}
+
+Output ONLY the fixed text.`,
+    text, 0.5, 3000);
+
+  return await hardTrim(apiKey, result, originalWordCount);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  PASS 6: Final verification
+// ═══════════════════════════════════════════════════════════════════
+async function pass6_verify(apiKey, text, originalWordCount) {
+  const { banned, aiOpeners, burst } = scoreText(text);
+  const minWords = Math.floor(originalWordCount * 0.93);
+  const maxWords = Math.ceil(originalWordCount * 1.07);
+
+  const allAidenText = AIDEN_EXAMPLES.slice(0,3).map((e,i) => `[HUMAN ${i+1}]\n"${e.answer}"`).join('\n\n');
+
+  const result = await mistral(apiKey,
+    `Final check before submission. Compare against these proven human examples and fix the last AI patterns.
+
+REAL HUMAN EXAMPLES:
+${allAidenText}
+
+PROVEN HUMAN OUTPUT (86% score):
+"${PROVEN_HUMAN_EXAMPLE.output}"
 
 WORD COUNT: Must stay ${minWords}–${maxWords} words (currently ${wc(text)}).
 
-CHECK EACH SENTENCE:
-- Does it have a person behind it? Or does it just report/explain something?
-- Is it short and direct? (under 20 words)
-- Does it use plain words a real person would say?
-- Does it STATE things rather than EXPLAIN them?
-
-Also fix:
-- Banned words: ${banned.length > 0 ? banned.join(', ') : 'none found'}
-- AI openers: ${aiOpeners.length > 0 ? aiOpeners.slice(0,3).map(s=>s.trim()).join(' | ') : 'none found'}
-- Burstiness: ${burst}${burst < 0.4 ? ' — TOO UNIFORM, vary sentence lengths (mix very short 4-6w with medium 10-15w)' : ' — ok'}
+CHECK FOR:
+1. Any sentence over 17 words — split it
+2. Any em dash — replace with period
+3. Any dramatic journalist phrase — replace with plain language
+4. Any banned word still present: ${banned.length > 0 ? banned.join(', ') : 'none'}
+5. Any AI opener: ${aiOpeners.length > 0 ? aiOpeners.slice(0,2).map(s=>s.trim().slice(0,40)).join(' | ') : 'none'}
+6. Burstiness is ${burst}${burst < 0.35 ? ' — TOO UNIFORM. Add 2-3 very short sentences (4-6 words) to break the rhythm.' : ' — ok'}
 
 Output ONLY the corrected text.`,
-    text, 0.72, 3000);
+    text, 0.65, 3000);
 
   return await hardTrim(apiKey, result, originalWordCount);
 }
@@ -415,9 +434,9 @@ async function pass7_wordCount(apiKey, text, originalWordCount) {
   const max = Math.ceil(originalWordCount * 1.07);
   if (current >= min && current <= max) return text;
   if (current > max) {
-    return await mistral(apiKey, `Trim from ${current} to between ${min} and ${max} words. Cut filler, keep all arguments. Output ONLY the trimmed text.`, text, 0.3, max * 3);
+    return await mistral(apiKey, `Trim from ${current} to between ${min} and ${max} words. Cut whole sentences that are least essential. Keep all main arguments. Output ONLY the result.`, text, 0.3, max * 3);
   } else {
-    return await mistral(apiKey, `Expand from ${current} to between ${min} and ${max} words. Add one concrete detail to an existing point. Output ONLY the expanded text.`, text, 0.5, max * 3);
+    return await mistral(apiKey, `Expand from ${current} to between ${min} and ${max} words. Add one short plain sentence to an existing point. Output ONLY the result.`, text, 0.5, max * 3);
   }
 }
 
@@ -426,8 +445,7 @@ async function pass7_wordCount(apiKey, text, originalWordCount) {
 // ═══════════════════════════════════════════════════════════════════
 export async function humanize(apiKey, inputText, strength, styleProfile, onProgress) {
   const log = (step, msg) => {
-    const full = `[${step}] ${msg}`;
-    console.log('  ' + full);
+    console.log(`  [${step}] ${msg}`);
     if (onProgress) onProgress({ step, msg });
   };
 
@@ -437,29 +455,26 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
   const originalWordCount = wc(inputText);
   console.log(`\n=== HUMANIZE START === ${originalWordCount} words ===`);
 
-  // Pass 1
   log('1/7', `Analyzing input... (${originalWordCount} words)`);
   let analysis;
   try {
     analysis = await pass1_analyze(apiKey, inputText);
     log('1/7', `Topic: "${analysis.topic}" | Type: ${analysis.type}`);
   } catch (e) {
-    log('1/7', `Analysis failed (${e.message}) — using defaults`);
-    analysis = { topic: 'general', type: detectInputType(inputText), position: 'makes a claim' };
+    log('1/7', `Analysis failed — using defaults`);
+    analysis = { topic: 'general', type: detectInputType(inputText) };
   }
 
-  // Pass 2
   log('2/7', 'Loading human writing examples...');
   let hfSentences = [];
   try {
     hfSentences = await loadHFSentences();
-    log('2/7', `Loaded ${hfSentences.length} specific human sentences`);
+    log('2/7', `Loaded ${hfSentences.length} human sentences`);
   } catch (e) {
-    log('2/7', `HuggingFace load failed (${e.message}) — continuing`);
+    log('2/7', `HF load failed — continuing`);
   }
 
-  // Pass 3
-  log('3/7', `Rewriting — converting explanations into reactions (${analysis.type} mode)...`);
+  log('3/7', `Rewriting in plain personal style (${analysis.type} mode)...`);
   let result;
   try {
     result = await pass3_rewrite(apiKey, inputText, analysis.type, strength || 'aggressive', styleProfile);
@@ -469,27 +484,24 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
     throw new Error(`Pass 3 failed: ${e.message}`);
   }
 
-  // Pass 4
-  log('4/7', 'Injecting specific real-world details...');
+  log('4/7', 'Fixing long sentences and dramatic phrases...');
   try {
-    result = await pass4_injectLife(apiKey, result, hfSentences, originalWordCount);
+    result = await pass4_fixDramatic(apiKey, result, originalWordCount);
     const s = scoreText(result);
-    log('4/7', `After inject: ${wc(result)} words | burst=${s.burst}`);
+    log('4/7', `After fix: ${wc(result)} words | burst=${s.burst}`);
   } catch (e) {
-    log('4/7', `Inject failed (${e.message}) — continuing`);
+    log('4/7', `Fix failed (${e.message}) — continuing`);
   }
 
-  // Pass 5
-  log('5/7', 'Scrubbing completeness sentences...');
+  log('5/7', 'Scrubbing banned words and AI openers...');
   try {
     result = await pass5_scrub(apiKey, result, originalWordCount);
     const s = scoreText(result);
-    log('5/7', `After scrub: ${wc(result)} words | burst=${s.burst} | banned=${s.banned.length} | ai-openers=${s.aiOpeners.length}`);
+    log('5/7', `After scrub: ${wc(result)} words | banned=${s.banned.length} | ai-openers=${s.aiOpeners.length}`);
   } catch (e) {
     log('5/7', `Scrub failed (${e.message}) — continuing`);
   }
 
-  // Pass 6
   log('6/7', 'Verification pass...');
   try {
     result = await pass6_verify(apiKey, result, inputText);
@@ -499,7 +511,6 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
     log('6/7', `Verify failed (${e.message}) — continuing`);
   }
 
-  // Pass 7
   const currentWC = wc(result);
   const min = Math.floor(originalWordCount * 0.93);
   const max = Math.ceil(originalWordCount * 1.07);
@@ -509,7 +520,7 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
       result = await pass7_wordCount(apiKey, result, originalWordCount);
       log('7/7', `Final: ${wc(result)} words`);
     } catch (e) {
-      log('7/7', `Word count fix failed (${e.message})`);
+      log('7/7', `Word count fix failed`);
     }
   } else {
     log('7/7', `Word count OK: ${currentWC}`);
@@ -528,7 +539,7 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
       originalWordCount,
       outputWordCount: wc(result),
       wordCountDelta: Math.round((wc(result) - originalWordCount) / originalWordCount * 100) + '%',
-      humanExampleSources: hfSentences.length > 0 ? ['HuggingFace human stories dataset'] : ['Aiden dataset only']
+      humanExampleSources: ['Aiden dataset', hfSentences.length > 0 ? 'HuggingFace human stories' : null].filter(Boolean)
     }
   };
 }
@@ -545,58 +556,43 @@ export async function answerAsAiden(apiKey, question, styleProfile, onProgress) 
   if (!apiKey) throw new Error('No API key provided');
   if (!question?.trim()) throw new Error('No question provided');
 
-  console.log(`\n=== ANSWER START === "${question}" ===`);
-
   log('1/3', 'Finding closest human example...');
   const closest = findClosestAidenExample(question);
   log('1/3', `Using "${closest.question}" as structural template`);
 
-  const closestBreakdown = sentenceBreakdown(closest.answer);
   const humanSentences = getSentences(closest.answer);
-  const allAidenText = AIDEN_EXAMPLES.map((e,i) => `[HUMAN ${i+1} — Q: "${e.question}"]\n${e.answer}`).join('\n\n');
-  const allAIText = AI_EXAMPLES.map(e => `[${e.label}]\n${e.sample}`).join('\n\n');
+  const allAidenText = AIDEN_EXAMPLES.map((e,i) => `[HUMAN ${i+1} — Q: "${e.question}"]\n"${e.answer}"`).join('\n\n');
   const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
 
   log('1/3', 'Writing answer using sentence structure...');
   const draft = await mistral(apiKey,
-    `Answer a question by substituting new content into the exact sentence structure of a real human answer.
+    `Answer a question in the exact voice and structure of these real human examples.
 
-━━━ THE HUMAN ANSWER TO COPY STRUCTURALLY ━━━
-Real person answered: "${closest.question}"
-Their answer sentence by sentence:
-${closestBreakdown}
-
-━━━ YOUR JOB ━━━
-Answer the NEW question using the SAME structure:
-- Same number of sentences
-- Each sentence same LENGTH (±3 words)
-- Same TYPE (declarative→declarative, question→question)
-- New content relevant to the new question
-
-━━━ ALL HUMAN EXAMPLES ━━━
 ${allAidenText}
 
-━━━ AI WRITING — NEVER PRODUCE THIS ━━━
-${allAIText}
+STRUCTURAL TEMPLATE — match this sentence by sentence:
+${sentenceBreakdown(closest.answer)}
 
-━━━ HARD RULES ━━━
-• Never over 20 words per sentence
-• Never: however, moreover, furthermore, nuanced, leverage, arguably
-• Never list concepts with commas
-• Never end with a caveat or "it depends"
-• Never acknowledge the other side has valid points
-• Use "I" and "we" naturally like Aiden does
+RULES (same as above — breaking these causes AI detection):
+• Every sentence under 18 words
+• No em dashes ever
+• No colon lists
+• No dramatic phrases
+• Plain casual words: "lots of", "way more", "can't", "used to"
+• Use "I" and "we" naturally
+• State your position clearly at the start
+• Repeat the main point at the end
 
 ${userStyleBlock}
 
 OUTPUT: Return ONLY the answer.`,
-    `New question: "${question}"\n\nWrite the answer matching the sentence-by-sentence structure of the human example above.`,
+    `Question: "${question}"\n\nWrite the answer matching the sentence-by-sentence structure of the template above.`,
     0.88, 800);
 
   log('2/3', 'Comparing draft to human answer sentence by sentence...');
   const draftSentences = getSentences(draft);
   const final = await mistral(apiKey,
-    `Compare the draft to the human answer sentence by sentence. Fix sentences that diverged.
+    `Compare this draft to the human answer and fix sentences that diverged.
 
 HUMAN ANSWER:
 ${humanSentences.map((s,i) => `H${i+1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n')}
@@ -604,17 +600,16 @@ ${humanSentences.map((s,i) => `H${i+1} [${s.split(/\s+/).length}w]: "${s}"`).joi
 DRAFT:
 ${draftSentences.map((s,i) => `D${i+1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n')}
 
-For each draft sentence:
-1. Within 3 words of human length? Fix if not.
-2. As direct and confident as human? Remove hedges if not.
-3. Plain vocabulary? Replace academic words.
-4. States rather than explains? Fix if explaining.
+Fix:
+1. Any draft sentence over 18 words — split it
+2. Any em dash — remove it
+3. Any sentence much longer than its human counterpart — shorten
+4. Any overly dramatic or journalistic phrasing — make plain
 
-Output ONLY the corrected full answer.`,
-    draft, 0.45, 800);
+Output ONLY the corrected answer.`,
+    draft, 0.4, 800);
 
   log('3/3', 'Done');
-  console.log(`=== ANSWER DONE ===\n`);
 
   return {
     text: final,
