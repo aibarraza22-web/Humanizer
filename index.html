@@ -108,6 +108,16 @@ select:focus{border-color:var(--accent)}
 .ex-item:last-child{border-bottom:none}
 .ex-tag{font-family:'JetBrains Mono',monospace;font-size:0.55rem;padding:1px 6px;border-radius:10px;background:rgba(108,99,255,0.15);color:var(--accent);margin-right:6px}
 
+/* answer tab */
+.answer-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;background:var(--s1)}
+.answer-box:focus-within{border-color:var(--border2)}
+.answer-out{min-height:200px;padding:16px;font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.76;color:var(--text2);white-space:pre-wrap;cursor:default}
+.answer-placeholder{color:var(--dim);font-style:italic}
+.q-input{width:100%;padding:14px 16px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.6;resize:vertical;outline:none;min-height:80px}
+.q-input:focus{border-color:var(--accent)}
+.q-input::placeholder{color:var(--dim);font-style:italic}
+.answer-scores{display:flex;gap:7px;flex-wrap:wrap}
+
 /* style tab */
 .style-desc{font-size:0.83rem;color:#555580;line-height:1.65;max-width:580px}
 .meth-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
@@ -167,13 +177,13 @@ select:focus{border-color:var(--accent)}
 <div class="app">
   <div class="tabs">
     <button class="tab active" onclick="switchTab('main',this)">Humanize</button>
+    <button class="tab" onclick="switchTab('answer',this)">Answer as Me</button>
     <button class="tab" onclick="switchTab('style',this)">Writing Style</button>
     <button class="tab" onclick="switchTab('tips',this)">Tips</button>
   </div>
 
   <!-- HUMANIZE TAB -->
   <div id="tab-main" class="panel active">
-
     <div class="steps">
       <div class="step active" id="step1"><div class="sdot">1</div><span>Topic</span></div>
       <div class="sline"></div>
@@ -219,14 +229,12 @@ select:focus{border-color:var(--accent)}
         </select>
       </div>
       <button class="btn-p" id="runBtn" onclick="run()">Humanize →</button>
-      <button class="btn-g" onclick="copyOut()">Copy output</button>
+      <button class="btn-g" onclick="copyOut('outputText')">Copy output</button>
     </div>
 
     <div class="prog-track" id="prog"><div class="prog-fill" id="progFill"></div></div>
-
     <div class="log-panel" id="logPanel"></div>
-
-    <div class="status" id="statusEl"><div class="s-dot"></div><span id="statusMsg">Ready — paste text and enter your Mistral API key to begin</span></div>
+    <div class="status" id="statusEl"><div class="s-dot"></div><span id="statusMsg">Ready — paste text and enter your Mistral API key</span></div>
 
     <div class="ex-panel" id="exPanel">
       <div class="ex-title">Real Reddit examples used this run</div>
@@ -234,9 +242,42 @@ select:focus{border-color:var(--accent)}
     </div>
   </div>
 
+  <!-- ANSWER AS ME TAB -->
+  <div id="tab-answer" class="panel">
+    <div style="font-size:0.83rem;color:#555580;line-height:1.65;max-width:620px">
+      Type a question and get an answer written in your voice — trained on your real writing, not an AI's idea of casual. Short, direct, confident. No bullet points, no hedging.
+    </div>
+
+    <div class="field">
+      <div class="flabel">Your question</div>
+      <textarea class="q-input" id="questionInput" placeholder="e.g. Should the US focus more on domestic strength than foreign intervention?"></textarea>
+    </div>
+
+    <div class="controls">
+      <button class="btn-p" id="answerBtn" onclick="answer()">Answer as Me →</button>
+      <button class="btn-g" onclick="copyOut('answerOutput')">Copy answer</button>
+    </div>
+
+    <div class="prog-track" id="answerProg"><div class="prog-fill" id="answerProgFill"></div></div>
+    <div class="log-panel" id="answerLog"></div>
+    <div class="status" id="answerStatus"><div class="s-dot"></div><span id="answerStatusMsg">Ready</span></div>
+
+    <div class="answer-box" id="answerBox">
+      <div class="ehead"><span class="elabel">Answer</span><span class="ewc" id="answerWC">0 words</span></div>
+      <div class="answer-out answer-placeholder" id="answerOutput">Your answer appears here...</div>
+    </div>
+
+    <div class="answer-scores score-row" id="answerScoreRow" style="display:none">
+      <div class="scard"><div class="sc-l">AI words found</div><div class="sc-v" id="aWords">—</div></div>
+      <div class="scard"><div class="sc-l">AI openers</div><div class="sc-v" id="aOpeners">—</div></div>
+      <div class="scard"><div class="sc-l">Burstiness</div><div class="sc-v" id="aBurst">—</div></div>
+      <div class="scard"><div class="sc-l">Word count</div><div class="sc-v" id="aWC">—</div></div>
+    </div>
+  </div>
+
   <!-- STYLE TAB -->
   <div id="tab-style" class="panel">
-    <p class="style-desc">Paste your own writing or fill the quiz. Your voice is extracted and applied as hard rules to every humanization.</p>
+    <p class="style-desc">Optionally add extra style notes on top of the built-in voice training. The pipeline already knows your core writing patterns from the dataset — use this to add personal quirks or topic-specific notes.</p>
     <div class="meth-grid">
       <button class="meth-btn active" onclick="switchMethod('sample',this)">📋 Paste writing sample</button>
       <button class="meth-btn" onclick="switchMethod('quiz',this)">✏️ Quick quiz</button>
@@ -245,7 +286,7 @@ select:focus{border-color:var(--accent)}
     <div id="m-sample" class="sblock active">
       <div class="field">
         <div class="flabel">Your writing sample</div>
-        <div class="fhint">Paste 5+ sentences from anything you've genuinely written — emails, essays, texts. Do NOT paste AI text.</div>
+        <div class="fhint">Paste 5+ sentences from anything you've genuinely written. This adds on top of the existing voice training.</div>
         <textarea class="sta" id="styleSample" rows="7" placeholder="Paste real writing here..."></textarea>
       </div>
       <button class="btn-save" id="saveSampleBtn" onclick="saveFromSample()">Analyze &amp; Save →</button>
@@ -262,42 +303,16 @@ select:focus{border-color:var(--accent)}
         </div>
       </div>
       <div class="field">
-        <div class="flabel">Sentence length</div>
-        <div class="chips">
-          <input type="radio" name="q2" id="q2a" value="short and punchy, usually under 12 words"><label for="q2a">Short & punchy</label>
-          <input type="radio" name="q2" id="q2b" value="medium length" checked><label for="q2b">Medium</label>
-          <input type="radio" name="q2" id="q2c" value="long and detailed"><label for="q2c">Long & detailed</label>
-          <input type="radio" name="q2" id="q2d" value="very mixed — some super short, some very long"><label for="q2d">Very mixed</label>
-        </div>
-      </div>
-      <div class="field">
         <div class="flabel">Contractions (it's, don't, can't)</div>
         <div class="chips">
           <input type="radio" name="q3" id="q3a" value="always use contractions"><label for="q3a">Always</label>
           <input type="radio" name="q3" id="q3b" value="usually use contractions" checked><label for="q3b">Usually</label>
-          <input type="radio" name="q3" id="q3c" value="sometimes use contractions"><label for="q3c">Sometimes</label>
-          <input type="radio" name="q3" id="q3d" value="rarely or never use contractions"><label for="q3d">Rarely/never</label>
+          <input type="radio" name="q3" id="q3c" value="rarely or never use contractions"><label for="q3c">Rarely/never</label>
         </div>
       </div>
       <div class="field">
-        <div class="flabel">Start sentences with And / But / So?</div>
-        <div class="chips">
-          <input type="radio" name="q4" id="q4a" value="often start sentences with And, But or So"><label for="q4a">Often</label>
-          <input type="radio" name="q4" id="q4b" value="sometimes start sentences with And or But"><label for="q4b">Sometimes</label>
-          <input type="radio" name="q4" id="q4c" value="never start sentences with conjunctions" checked><label for="q4c">Never</label>
-        </div>
-      </div>
-      <div class="field">
-        <div class="flabel">Vocabulary</div>
-        <div class="chips">
-          <input type="radio" name="q5" id="q5a" value="simple everyday words" checked><label for="q5a">Simple/everyday</label>
-          <input type="radio" name="q5" id="q5b" value="moderate vocabulary"><label for="q5b">Moderate</label>
-          <input type="radio" name="q5" id="q5c" value="academic or advanced vocabulary"><label for="q5c">Advanced/academic</label>
-        </div>
-      </div>
-      <div class="field">
-        <div class="flabel">Anything else? <span style="font-weight:400;color:#555580;font-size:0.69rem">(optional)</span></div>
-        <textarea class="sta" id="qExtra" rows="2" style="min-height:52px" placeholder="e.g. I use em-dashes a lot, I write in first person, I tend to repeat key words..."></textarea>
+        <div class="flabel">Anything else?</div>
+        <textarea class="sta" id="qExtra" rows="2" style="min-height:52px" placeholder="e.g. I write in first person, I tend to use real-world examples..."></textarea>
       </div>
       <button class="btn-save" onclick="saveFromQuiz()">Save Style →</button>
     </div>
@@ -305,7 +320,7 @@ select:focus{border-color:var(--accent)}
     <div class="style-bar">
       <div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:0.55rem;text-transform:uppercase;letter-spacing:0.1em;color:#555580;margin-bottom:4px">Active profile</div>
-        <div class="sbadge" id="styleBadge">No style saved</div>
+        <div class="sbadge" id="styleBadge">No extra style saved</div>
       </div>
       <button class="btn-clear" onclick="clearStyle()">✕ Clear</button>
     </div>
@@ -314,28 +329,26 @@ select:focus{border-color:var(--accent)}
   <!-- TIPS TAB -->
   <div id="tab-tips" class="panel">
     <div class="tips-grid">
-      <div class="tip"><div class="tip-n">01</div><h3>How it works</h3><p>Scrapes Reddit live for real posts on your topic, then uses those as examples and directly splices real human sentences into the output. The model sees what real humans wrote — not AI imitations — before rewriting your text.</p></div>
-      <div class="tip"><div class="tip-n">02</div><h3>7-pass pipeline</h3><p>Topic → Reddit scrape → Rewrite → Splice real sentences → Surgical scrub → Verification → Word count fix. Each pass catches what the previous missed. The splice pass is the key one — it inserts genuinely human-written sentences GPTZero can't flag.</p></div>
-      <div class="tip"><div class="tip-n">03</div><h3>Set your writing style</h3><p>Paste a sample of your real writing before running. Even a few sentences makes a big difference — it extracts your rhythm and applies it as hard rules.</p></div>
-      <div class="tip"><div class="tip-n">04</div><h3>Make a few edits yourself</h3><p>Change 2–3 sentences to exactly how you'd write them. Genuinely human text that no AI can replicate. Biggest single improvement you can make.</p></div>
-      <div class="tip"><div class="tip-n">05</div><h3>Burstiness score</h3><p>Human writing scores 0.5+. Below 0.4 means sentence lengths are too uniform — GPTZero's #1 signal. The pipeline enforces this but check the score after.</p></div>
-      <div class="tip"><div class="tip-n">06</div><h3>Running the server</h3><p>This tool needs the Node server running. Open terminal in the project folder and run: <code style="background:var(--s3);padding:1px 5px;border-radius:3px;font-size:0.75rem">npm start</code></p></div>
+      <div class="tip"><div class="tip-n">01</div><h3>Trained on real data</h3><p>The pipeline is trained on a real human vs AI dataset — it knows exactly what patterns to write toward and which ones to avoid. It's not guessing at "casual" — it has real examples.</p></div>
+      <div class="tip"><div class="tip-n">02</div><h3>7-pass pipeline</h3><p>Topic → Reddit scrape → Rewrite → Splice real sentences → Scrub AI patterns → Verify → Fix word count. Each pass targets something specific.</p></div>
+      <div class="tip"><div class="tip-n">03</div><h3>Answer as Me</h3><p>Use the Answer tab for discussion posts, short answers, or any question you need to respond to. It answers the way you'd answer — direct, confident, no hedging.</p></div>
+      <div class="tip"><div class="tip-n">04</div><h3>Make a few edits yourself</h3><p>Change 2–3 sentences to exactly how you'd write them. Genuinely human text no AI can replicate. The single biggest improvement you can make.</p></div>
+      <div class="tip"><div class="tip-n">05</div><h3>Works on research papers too</h3><p>Paste sections of a research paper — the pipeline preserves all your citations, evidence, and arguments while rewriting the prose to sound human.</p></div>
+      <div class="tip"><div class="tip-n">06</div><h3>Running the server</h3><p>Open terminal in the project folder and run: <code style="background:var(--s3);padding:1px 5px;border-radius:3px;font-size:0.75rem">npm start</code></p></div>
     </div>
   </div>
 </div>
 
 <script>
 'use strict';
-
 let styleProfile = null;
 
-// ─── word count ───────────────────────────────────────────────────────────────
 const wc = t => t.trim() ? t.trim().split(/\s+/).length : 0;
+
 document.getElementById('inputText').addEventListener('input', () => {
   document.getElementById('inWC').textContent = wc(document.getElementById('inputText').value) + ' words';
 });
 
-// ─── ui helpers ───────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
@@ -348,12 +361,10 @@ function switchMethod(name, btn) {
   document.getElementById('m-' + name).classList.add('active');
   btn.classList.add('active');
 }
-function setStatus(msg, type='') {
-  document.getElementById('statusMsg').textContent = msg;
-  document.getElementById('statusEl').className = 'status ' + type;
+function setStatus(id, msg, type='') {
+  document.getElementById(id + 'Msg').textContent = msg;
+  document.getElementById(id).className = 'status ' + type;
 }
-
-// 7 steps total
 function setStep(n) {
   for (let i = 1; i <= 7; i++) {
     const el = document.getElementById('step' + i);
@@ -363,19 +374,11 @@ function setStep(n) {
     else if (i === n) el.classList.add('active');
   }
 }
-
-// Map the [X/7] step tag from pipeline logs to a step number
-const stepForMsg = msg => {
-  const m = msg.match(/(\d)\/7/);
-  if (m) return parseInt(m[1]);
-  return null;
-};
-
-// Progress bar percentages for each of the 7 steps
+const stepForMsg = msg => { const m = msg.match(/(\d)\/7/); return m ? parseInt(m[1]) : null; };
 const progForStep = n => [0, 8, 18, 35, 50, 65, 80, 92][n] || 0;
 
-function addLog(msg, state='active') {
-  const panel = document.getElementById('logPanel');
+function addLog(panelId, msg, state='active') {
+  const panel = document.getElementById(panelId);
   panel.classList.add('show');
   const step = msg.match(/\[(\d\/\d)\]/)?.[1] || '';
   const text = msg.replace(/\[\d\/\d\]\s*/, '');
@@ -386,24 +389,24 @@ function addLog(msg, state='active') {
   panel.scrollTop = panel.scrollHeight;
 }
 
-function setProg(pct) { document.getElementById('progFill').style.width = pct + '%'; }
-function showProg() { document.getElementById('prog').classList.add('on'); }
-function hideProg() {
-  setProg(100);
-  setTimeout(() => { document.getElementById('prog').classList.remove('on'); setProg(0); }, 600);
+function setProg(id, pct) { document.getElementById(id).style.width = pct + '%'; }
+function showProg(id) { document.getElementById(id).classList.add('on'); }
+function hideProg(id) {
+  setProg(id + 'Fill', 100);
+  setTimeout(() => { document.getElementById(id).classList.remove('on'); setProg(id + 'Fill', 0); }, 600);
 }
-function sc(id, val, cls) { const e = document.getElementById(id); e.textContent = val; e.className = 'sc-v ' + cls; }
+function sc(id, val, cls) { const e = document.getElementById(id); if(e){e.textContent = val; e.className = 'sc-v ' + cls;} }
 
-// ─── main run ─────────────────────────────────────────────────────────────────
+// ─── HUMANIZE ─────────────────────────────────────────────────────────────────
 async function run() {
   const apiKey = document.getElementById('apiKey').value.trim();
   const inputText = document.getElementById('inputText').value.trim();
   const strength = document.getElementById('strength').value;
   const btn = document.getElementById('runBtn');
 
-  if (!apiKey) return setStatus('Enter your Mistral API key.', 'err');
-  if (!inputText) return setStatus('Paste some text first.', 'err');
-  if (wc(inputText) > 1400) return setStatus('Too long — split into chunks under 1400 words.', 'err');
+  if (!apiKey) return setStatus('statusEl', 'Enter your Mistral API key.', 'err');
+  if (!inputText) return setStatus('statusEl', 'Paste some text first.', 'err');
+  if (wc(inputText) > 1400) return setStatus('statusEl', 'Too long — split into chunks under 1400 words.', 'err');
 
   btn.disabled = true;
   document.getElementById('scoreRow').style.display = 'none';
@@ -413,8 +416,8 @@ async function run() {
   document.getElementById('logPanel').innerHTML = '';
   document.getElementById('logPanel').classList.remove('show');
 
-  showProg(); setProg(3); setStep(1);
-  setStatus('Running 7-pass pipeline — scraping Reddit, rewriting, splicing, scrubbing...', 'working');
+  showProg('prog'); setProg('progFill', 3); setStep(1);
+  setStatus('statusEl', 'Running 7-pass pipeline...', 'working');
 
   try {
     const response = await fetch('/humanize', {
@@ -422,11 +425,7 @@ async function run() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey, text: inputText, strength, styleProfile })
     });
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'Server error');
-    }
+    if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Server error'); }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -445,16 +444,15 @@ async function run() {
 
         if (event.type === 'progress') {
           const fullMsg = `[${event.step}] ${event.msg}`;
-          addLog(fullMsg);
+          addLog('logPanel', fullMsg);
           const stepNum = stepForMsg(event.step);
-          if (stepNum) { setStep(stepNum); setProg(progForStep(stepNum)); }
+          if (stepNum) { setStep(stepNum); setProg('progFill', progForStep(stepNum)); }
 
         } else if (event.type === 'result') {
           document.getElementById('outputText').value = event.text;
           const outW = wc(event.text);
           const inW = wc(inputText);
           document.getElementById('outWC').textContent = outW + ' words';
-
           const s = event.scores;
           const diff = Math.abs(outW - inW) / inW;
 
@@ -466,17 +464,15 @@ async function run() {
           sc('sLen', diff < 0.06 ? '✓ matched' : diff < 0.14 ? '~ close' : '✗ off', diff < 0.06 ? 'g' : diff < 0.14 ? 'm' : 'b');
 
           document.getElementById('scoreRow').style.display = 'flex';
-
           if (s.humanExampleSources?.length) {
             document.getElementById('exContent').innerHTML =
               `<div class="ex-item"><span class="ex-tag">sources</span>${s.humanExampleSources.join(', ')}</div>
-               <div class="ex-item"><span class="ex-tag">count</span>${s.examplesUsed} real Reddit paragraphs used as training signal</div>`;
+               <div class="ex-item"><span class="ex-tag">count</span>${s.examplesUsed} real Reddit paragraphs used</div>`;
             document.getElementById('exPanel').className = 'ex-panel show';
           }
-
-          setStep(7); hideProg();
-          setStatus('Done — ' + s.examplesUsed + ' Reddit examples used. Make 1–2 of your own edits for best results.', 'ok');
-          addLog('Complete ✓', 'done');
+          setStep(7); hideProg('prog');
+          setStatus('statusEl', 'Done — ' + s.examplesUsed + ' Reddit examples used. Make 1–2 of your own edits for best results.', 'ok');
+          addLog('logPanel', 'Complete ✓', 'done');
 
         } else if (event.type === 'error') {
           throw new Error(event.message);
@@ -484,18 +480,104 @@ async function run() {
       }
     }
   } catch (err) {
-    hideProg(); setStep(1);
-    setStatus('Error: ' + err.message, 'err');
-    addLog('Error: ' + err.message);
+    hideProg('prog'); setStep(1);
+    setStatus('statusEl', 'Error: ' + err.message, 'err');
+    addLog('logPanel', 'Error: ' + err.message);
   }
-
   btn.disabled = false;
 }
 
-// ─── style save ───────────────────────────────────────────────────────────────
+// ─── ANSWER AS ME ─────────────────────────────────────────────────────────────
+async function answer() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const question = document.getElementById('questionInput').value.trim();
+  const btn = document.getElementById('answerBtn');
+
+  if (!apiKey) return setStatus('answerStatus', 'Enter your Mistral API key.', 'err');
+  if (!question) return setStatus('answerStatus', 'Enter a question first.', 'err');
+
+  btn.disabled = true;
+  document.getElementById('answerLog').innerHTML = '';
+  document.getElementById('answerLog').classList.remove('show');
+  document.getElementById('answerScoreRow').style.display = 'none';
+
+  const outEl = document.getElementById('answerOutput');
+  outEl.textContent = 'Generating...';
+  outEl.classList.add('answer-placeholder');
+
+  showProg('answerProg'); setProg('answerProgFill', 10);
+  setStatus('answerStatus', 'Writing your answer...', 'working');
+
+  try {
+    const response = await fetch('/answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey, question, styleProfile })
+    });
+    if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Server error'); }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let event;
+        try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (event.type === 'progress') {
+          addLog('answerLog', `[${event.step}] ${event.msg}`);
+          setProg('answerProgFill', event.step === '1/2' ? 40 : 80);
+
+        } else if (event.type === 'result') {
+          outEl.textContent = event.text;
+          outEl.classList.remove('answer-placeholder');
+          document.getElementById('answerWC').textContent = wc(event.text) + ' words';
+
+          const s = event.scores;
+          sc('aWords', s.bannedWordsFound.length === 0 ? '✓ clean' : s.bannedWordsFound.length + ' found', s.bannedWordsFound.length === 0 ? 'g' : 'b');
+          sc('aOpeners', s.aiOpenersFound === 0 ? '✓ none' : s.aiOpenersFound + ' found', s.aiOpenersFound === 0 ? 'g' : 'b');
+          sc('aBurst', s.burstiness >= 0.4 ? '✓ ' + s.burstiness : '~ ' + s.burstiness, s.burstiness >= 0.4 ? 'g' : 'm');
+          sc('aWC', s.wordCount + ' words', 'g');
+
+          document.getElementById('answerScoreRow').style.display = 'flex';
+          hideProg('answerProg');
+          setStatus('answerStatus', 'Done.', 'ok');
+          addLog('answerLog', 'Complete ✓', 'done');
+
+        } else if (event.type === 'error') {
+          throw new Error(event.message);
+        }
+      }
+    }
+  } catch (err) {
+    hideProg('answerProg');
+    setStatus('answerStatus', 'Error: ' + err.message, 'err');
+    outEl.textContent = 'Error — see status above.';
+  }
+  btn.disabled = false;
+}
+
+// ─── COPY ─────────────────────────────────────────────────────────────────────
+function copyOut(id) {
+  const el = document.getElementById(id);
+  const text = el.tagName === 'TEXTAREA' ? el.value : el.textContent;
+  if (!text || text === 'Your answer appears here...') return setStatus('statusEl', 'Nothing to copy.', 'err');
+  navigator.clipboard.writeText(text);
+  setStatus('statusEl', 'Copied.', 'ok');
+  setTimeout(() => setStatus('statusEl', 'Ready'), 2000);
+}
+
+// ─── STYLE ────────────────────────────────────────────────────────────────────
 async function saveFromSample() {
   const sample = document.getElementById('styleSample').value.trim();
-  if (wc(sample) < 15) return alert('Paste at least a few sentences of your real writing.');
+  if (wc(sample) < 15) return alert('Paste at least a few sentences.');
   const apiKey = document.getElementById('apiKey').value.trim();
   const btn = document.getElementById('saveSampleBtn');
   btn.disabled = true; btn.textContent = 'Analyzing...';
@@ -512,7 +594,7 @@ async function saveFromSample() {
     updateBadge('✓ Style saved — ' + data.examples.length + ' examples');
   } catch (e) {
     styleProfile = { type: 'raw', raw: sample, examples: null };
-    updateBadge('Sample saved (analyze failed: ' + e.message + ')');
+    updateBadge('Sample saved');
   }
   btn.disabled = false; btn.textContent = 'Analyze & Save →';
 }
@@ -522,26 +604,17 @@ function saveFromQuiz() {
   const extra = document.getElementById('qExtra').value.trim();
   styleProfile = {
     type: 'quiz',
-    summary: [get('q1'),get('q2'),get('q3'),get('q4'),get('q5'),extra].filter(Boolean).join(' | '),
+    summary: [get('q1'),get('q3'),extra].filter(Boolean).join(' | '),
     examples: null
   };
   updateBadge('✓ Style saved from quiz');
 }
 
 function clearStyle() { styleProfile = null; updateBadge(null); }
-
 function updateBadge(msg) {
   const b = document.getElementById('styleBadge');
-  b.textContent = msg || 'No style saved';
+  b.textContent = msg || 'No extra style saved';
   b.className = 'sbadge' + (msg?.startsWith('✓') ? ' set' : '');
-}
-
-function copyOut() {
-  const out = document.getElementById('outputText').value;
-  if (!out) return setStatus('Nothing to copy yet.', 'err');
-  navigator.clipboard.writeText(out);
-  setStatus('Copied.', 'ok');
-  setTimeout(() => setStatus('Ready'), 2000);
 }
 </script>
 </body>
