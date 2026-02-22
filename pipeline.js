@@ -1,7 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
-//  pipeline.js — multi-pass humanization using Groq Mixtral
-//  Mixtral (mixtral-8x7b-32768) has 32k context vs LLaMA's 12k free tier
-//  This lets us use more Reddit examples with longer excerpts.
+//  pipeline.js — multi-pass humanization using Mistral AI
+//  Uses Mistral's own API (api.mistral.ai) — pass your Mistral key.
 //
 //  Pass 1: extract topic + keywords
 //  Pass 2: rewrite using REAL Reddit examples
@@ -15,18 +14,14 @@
 import fetch from 'node-fetch';
 import { gatherHumanExamples } from './scraper.js';
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 
-// Mixtral has 32k context window on Groq free tier — much more headroom than LLaMA
-const MODEL_MAIN   = 'mixtral-8x7b-32768';  // for rewrite + splice (quality matters most)
-const MODEL_FAST   = 'mixtral-8x7b-32768';  // same model — can swap to llama-3.1-8b-instant if rate limited
+// mistral-large-latest: best quality for rewrite + splice
+// mistral-small-latest: faster + cheaper for scrub/verify/burstiness/wordcount
+const MODEL_MAIN = 'mistral-large-latest';
+const MODEL_FAST = 'mistral-small-latest';
 
-// Token budget (32k context = lots of room):
-// ~4k  system prompt scaffolding + rules
-// ~3k  input text (up to ~2000 words)
-// ~6k  Reddit examples (12 examples x 500 chars = ~2k tokens with overhead)
-// ~4k  output
-// = ~17k — well under 32k limit
+// Mistral has generous context windows — plenty of room for examples
 const EXAMPLE_COUNT_REWRITE  = 12;   // examples for the main rewrite pass
 const EXAMPLE_COUNT_SPLICE   = 25;   // individual sentences to offer for splicing
 const EXAMPLE_COUNT_SCRUB    = 6;    // examples for scrub pass reminder
@@ -63,20 +58,26 @@ const AI_OPENERS = [
   /^(Building on|Building upon)\s/i,
 ];
 
-// ─── Groq call ───────────────────────────────────────────────────────────────
-async function groq(apiKey, system, user, temp = 0.85, maxTokens = 2048, model = MODEL_MAIN) {
-  const res = await fetch(GROQ_URL, {
+// ─── Mistral API call ─────────────────────────────────────────────────────────
+async function mistral(apiKey, system, user, temp = 0.85, maxTokens = 2048, model = MODEL_MAIN) {
+  const res = await fetch(MISTRAL_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
     body: JSON.stringify({
       model,
-      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ],
       temperature: temp,
       max_tokens: maxTokens
     })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || 'Groq API error');
+  if (!res.ok) throw new Error(data.message || data.error?.message || 'Mistral API error');
   return data.choices[0].message.content.trim();
 }
 
@@ -128,7 +129,7 @@ async function extractTopic(apiKey, text) {
 Return JSON only, exactly:
 {"topic":"short topic name","keywords":"3-5 word search phrase for Reddit","genre":"essay|argument|analysis|personal|technical"}
 No other text.`;
-  const raw = await groq(apiKey, system, text.slice(0, 600), 0.1, 200);
+  const raw = await mistral(apiKey, system, text.slice(0, 600), 0.1, 200);
   try {
     const cleaned = raw.replace(/```json|```/g, '').trim();
     return JSON.parse(cleaned);
@@ -149,7 +150,8 @@ async function rewriteWithExamples(apiKey, inputText, humanExamples, strength, s
     subtle: `You are lightly editing this to sound more natural and less machine-like. Adjust rhythm, break up smooth sentences, add small imperfections. Keep the structure mostly intact.`
   };
 
-  const temps = { aggressive: 1.1, standard: 0.98, subtle: 0.80 };
+  const temps = { aggressive: 1.0, standard: 0.9, subtle: 0.75 };
+  // Note: Mistral caps temperature at 1.0, unlike Groq which allowed 1.1
 
   const examples = pickExamples(humanExamples, EXAMPLE_COUNT_REWRITE, EXAMPLE_MAX_CHARS);
 
@@ -167,7 +169,7 @@ WHAT TO ABSORB FROM THESE EXAMPLES:
 • Their imperfections — fragments, asides, hedges, self-corrections, tangents
 • How they express opinions — "I think", "honestly", "the thing is", "I mean"
 • Where they put emphasis — not at the end of a clean thesis, but mid-thought
-• What they DON'T do — they don't summarize, they don't transition formally, they don't conclude
+• What they DON'T do — they don't summarize, they don't transition formally, they don't conclude neatly
 
 ${examples.map((e, i) =>
   `[EXAMPLE ${i + 1} — ${e.source}]\n"${e.text}"`
@@ -210,7 +212,7 @@ SENTENCE VARIATION — BURSTINESS:
 GPTZero also detects uniform sentence length.
 Every 4 sentences must contain:
   • At least 1 sentence under 8 words
-  • At least 1 sentence over 25 words  
+  • At least 1 sentence over 25 words
   • The rest genuinely varied — not all 15-20 words
 
 FRAGMENTS (MANDATORY):
@@ -237,22 +239,16 @@ BANNED SENTENCE OPENERS — NEVER START A SENTENCE WITH:
 
 OUTPUT: Return ONLY the rewritten text. Absolutely nothing before or after it.`;
 
-  return await groq(apiKey, system, `Rewrite this text now:\n\n${inputText}`, temps[strength], 3000);
+  return await mistral(apiKey, system, `Rewrite this text now:\n\n${inputText}`, temps[strength], 3000);
 }
 
 // ─── PASS 3: Splice real human sentences directly into the text ───────────────
-// This is the key pass for beating GPTZero — we replace the most AI-sounding
-// sentences with real human sentences from Reddit. GPTZero literally cannot
-// flag genuinely human-written text as AI because its perplexity score
-// will be naturally high (humans are unpredictable).
 async function spliceHumanSentences(apiKey, text, humanExamples, originalWordCount) {
   if (humanExamples.length === 0) return text;
 
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
 
-  // Pull individual sentences from all examples — prefer medium-length ones
-  // that are likely to fit naturally into an essay context
   const humanSentences = humanExamples
     .flatMap(e => (e.text.match(/[^.!?]+[.!?]+/g) || []))
     .map(s => s.trim())
@@ -261,7 +257,6 @@ async function spliceHumanSentences(apiKey, text, humanExamples, originalWordCou
       return words >= 8 && words <= 35;
     })
     .filter(s => {
-      // Filter out sentences that are too Reddit-specific to work in an essay
       const lower = s.toLowerCase();
       return !lower.includes('subreddit') &&
              !lower.includes('upvote') &&
@@ -271,7 +266,7 @@ async function spliceHumanSentences(apiKey, text, humanExamples, originalWordCou
              !lower.match(/^(lol|lmao|omg|wtf|smh)/i);
     });
 
-  if (humanSentences.length < 5) return text; // not enough to splice
+  if (humanSentences.length < 5) return text;
 
   const selected = shuffle(humanSentences).slice(0, EXAMPLE_COUNT_SPLICE);
 
@@ -299,7 +294,7 @@ WORD COUNT: Keep output between ${minWords} and ${maxWords} words.
 
 Output ONLY the edited text. No explanation, no preamble.`;
 
-  return await groq(apiKey, system, `Edit this text:\n\n${text}`, 0.45, 3000);
+  return await mistral(apiKey, system, `Edit this text:\n\n${text}`, 0.45, 3000);
 }
 
 // ─── PASS 4: Surgical scrub ────────────────────────────────────────────────────
@@ -342,7 +337,7 @@ ALWAYS DO ALL OF THESE (swap existing content — do not add):
 
 Output ONLY the fixed text. No preamble, no explanation.`;
 
-  return await groq(apiKey, system, `Fix this text:\n\n${text}`, 0.72, 3000, MODEL_FAST);
+  return await mistral(apiKey, system, `Fix this text:\n\n${text}`, 0.72, 3000, MODEL_FAST);
 }
 
 // ─── PASS 5: Verification pass ───────────────────────────────────────────────
@@ -366,7 +361,7 @@ WHAT GPTZero AND TURNITIN ACTUALLY LOOK FOR:
 5. Thesis-demonstration structure — claim → evidence → conclusion, every time
 6. Zero personality markers — no hedges, no fragments, no first-person voice
 7. Suspiciously correct vocabulary — polished but no one actually talks like this
-8. Commercial humanizer fingerprints — they're trained on humanizer output too
+8. Commercial humanizer fingerprints — detectors are now trained on humanizer output
 
 ${examples.length > 0 ? `Real human writing on this topic for comparison:\n${exampleSnippets}` : ''}
 
@@ -387,7 +382,7 @@ WORD COUNT: Original was ${originalWordCount} words. Stay between ${minWords} an
 
 Output ONLY the corrected text. Nothing else.`;
 
-  return await groq(apiKey, system, `Review and fix this text:\n\n${text}`, 0.78, 3000, MODEL_FAST);
+  return await mistral(apiKey, system, `Review and fix this text:\n\n${text}`, 0.78, 3000, MODEL_FAST);
 }
 
 // ─── PASS 6: Final burstiness enforcement ────────────────────────────────────
@@ -414,7 +409,7 @@ Restructure existing sentences — do not add new content.
 Keep 100% of the meaning.
 Output ONLY the fixed text.`;
 
-  return await groq(apiKey, system, text, 0.65, 3000, MODEL_FAST);
+  return await mistral(apiKey, system, text, 0.65, 3000, MODEL_FAST);
 }
 
 // ─── PASS 7: Word count enforcement ──────────────────────────────────────────
@@ -437,7 +432,7 @@ Trim by:
 Do NOT cut any ideas, arguments, or key points.
 
 Output ONLY the trimmed text. No explanation.`;
-    return await groq(apiKey, system, text, 0.3, maxWords * 2, MODEL_FAST);
+    return await mistral(apiKey, system, text, 0.3, maxWords * 2, MODEL_FAST);
   } else {
     const system = `This text is ${currentWC} words. Expand it to between ${minWords} and ${maxWords} words (original was ${originalWordCount} words).
 
@@ -447,7 +442,7 @@ Expand by:
 Do NOT add new arguments or change any existing ideas.
 
 Output ONLY the expanded text. No explanation.`;
-    return await groq(apiKey, system, text, 0.5, maxWords * 2, MODEL_FAST);
+    return await mistral(apiKey, system, text, 0.5, maxWords * 2, MODEL_FAST);
   }
 }
 
@@ -487,6 +482,7 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
   };
 
   const originalWordCount = wc(inputText);
+
   log('1/7', `Analyzing topic and keywords... (original: ${originalWordCount} words)`);
   const topicData = await extractTopic(apiKey, inputText);
   log('1/7', `Topic: "${topicData.topic}" | Keywords: "${topicData.keywords}"`);
