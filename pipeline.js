@@ -505,58 +505,103 @@ export async function answerAsAiden(apiKey, question, styleProfile, onProgress) 
     if (onProgress) onProgress({ step, msg });
   };
 
-  log('1/2', 'Analyzing question...');
+  log('1/3', 'Writing answer...');
 
-  const styleBlock = buildAidenStyleBlock([], 0, 0);
+  // Step 1: Pick the most similar Aiden example to use as a structural template
+  // This forces the model to copy sentence structure, not just themes
+  const templateExample = AIDEN_EXAMPLES[Math.floor(Math.random() * AIDEN_EXAMPLES.length)];
+
   const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
 
-  const system = `You are answering a question exactly as Aiden would answer it — not as an AI assistant.
+  // Show ALL of Aiden's answers plus BOTH AI answers so the model clearly
+  // sees the contrast — especially the structural difference, not just vocabulary
+  const allAidenAnswers = AIDEN_EXAMPLES.map((e, i) =>
+    `[AIDEN ANSWER ${i + 1} — Question: "${e.question}"]\n${e.answer}`
+  ).join('\n\n');
 
-${styleBlock}
+  const allAIAnswers = AI_EXAMPLES.map(e =>
+    `[${e.label}]\n${e.sample}`
+  ).join('\n\n');
+
+  const system = `You are writing an answer to a question. Your answer must be written exactly like Aiden writes — not like an AI.
+
+━━━ AIDEN'S ACTUAL ANSWERS — READ EVERY WORD ━━━
+These are real answers written by a real person named Aiden. This is who you are writing as.
+
+${allAidenAnswers}
+
+━━━ AI WRITING — DO NOT WRITE LIKE THIS ━━━
+These are AI answers. They are the opposite of what you should produce.
+
+${allAIAnswers}
+
+━━━ WHAT YOU MUST COPY FROM AIDEN ━━━
+
+Look at how Aiden's sentences are literally built. Copy this:
+
+SENTENCE 1 of any Aiden answer: States the conclusion directly. Short. "[Yes/No], [restate the question as a fact]."
+Example: "Yes, the US should first focus on domestic strength more than foreign intervention."
+Example: "AI will determine global superpower status."
+Example: "No, the government should definitely not regulate advanced AI models the way they regulate nuclear technology."
+
+THEN: He explains WHY in 1-2 short sentences. Plain. Direct. No hedging.
+THEN: He gives a real-world comparison or historical example. Something specific, not abstract.
+THEN: He applies that example to the current question in 1-2 sentences.
+THEN: He ends by restating his opening point in slightly different words.
+
+WHAT HE NEVER DOES:
+- Never writes a sentence longer than ~20 words
+- Never uses "however", "moreover", "furthermore", "it could be argued"
+- Never acknowledges the other side has a point
+- Never uses bullet points or numbered lists
+- Never uses "nuanced", "complex", "multifaceted", "leverage", "incumbent"
+- Never ends with "it depends" or "the answer is complicated"
+- Never writes more than 4-5 sentences per paragraph
+
+TEMPLATE TO FOLLOW — use this exact structure:
+Based on: "${templateExample.question}"
+Aiden wrote: "${templateExample.answer}"
+
+Your answer should follow the SAME structural rhythm as that answer.
+Not the same words. The same rhythm, sentence length pattern, and argumentative flow.
+
 ${userStyleBlock}
 
-━━━ HOW TO ANSWER ━━━
+━━━ LENGTH ━━━
+80-150 words. Aiden is punchy. He says what he means and stops.
 
-Read all of Aiden's example answers above. Your answer must:
-• Take a clear position immediately — open with your conclusion
-• Write in short, direct sentences
-• Use "I" naturally
-• Ground the argument in specific, concrete things
-• Repeat key phrases to emphasize your point
-• Use casual, everyday vocabulary
-• Write in connected paragraphs — no lists, no numbered points, no headers
-• State things as facts, not possibilities
-• End by restating the main point
+OUTPUT: Return ONLY the answer. No preamble, no explanation, nothing else.`;
 
-Your answer must NOT:
-• Start with "It's a great question" or any preamble
-• Hedge with "arguably" or "it could be said"
-• Map multiple perspectives
-• Use numbered structure
-• Use any banned words: ${BANNED.slice(0, 20).join(', ')}...
-• End by acknowledging the other side has valid points
+  const draft = await mistral(apiKey, system, `Answer this question as Aiden:\n\n"${question}"`, 0.92, 800);
 
-Length: 100–200 words. Punchy, not exhaustive.
+  log('2/3', 'Checking against Aiden\'s voice...');
 
-Output ONLY the answer. Nothing before or after.`;
+  // Step 2: Show the draft back to the model alongside Aiden's most similar answer
+  // and ask it to identify anything that still sounds AI and fix it
+  const checkSystem = `You are comparing a draft answer against real human writing and fixing anything that still sounds AI.
 
-  log('1/2', 'Writing answer...');
-  const answer = await mistral(apiKey, system, question, 0.9, 1000);
+AIDEN'S REAL ANSWER ON A SIMILAR TOPIC:
+"${templateExample.answer}"
 
-  log('2/2', 'Checking for AI patterns...');
-  const scores = scoreText(answer);
+THE DRAFT:
+"${draft}"
 
-  // Quick scrub if needed
-  let final = answer;
-  if (scores.banned.length > 0 || scores.aiOpeners.length > 0) {
-    const scrubSystem = `Fix these AI patterns in the text. Swap, do not add content.
-Banned words to replace: ${scores.banned.join(', ') || 'none'}
-AI openers to rewrite: ${scores.aiOpeners.slice(0,3).map(s=>s.trim()).join(' | ') || 'none'}
-Output ONLY the fixed text.`;
-    final = await mistral(apiKey, scrubSystem, answer, 0.5, 1000);
-  }
+WHAT TO CHECK:
+1. Does the draft open with a direct conclusion like Aiden does? If not — rewrite the opening.
+2. Are there any sentences over 20 words? Break them up.
+3. Does it hedge or say "it depends" anywhere? Remove it — pick a side.
+4. Does it use any of these words: furthermore, moreover, however, nuanced, leverage, complex, multifaceted, arguably, incumbent? Replace them.
+5. Does it end by restating the main point? If it ends with a caveat or balance — replace the ending.
+6. Does it sound like a person talking or like a report? If report — rewrite toward how a person actually speaks.
+7. Does it use "I" naturally, like Aiden does? If not — add it where natural.
 
-  log('2/2', 'Done');
+Make only necessary fixes. Keep the content and argument.
+Output ONLY the corrected answer.`;
+
+  let final = await mistral(apiKey, checkSystem, draft, 0.5, 800);
+
+  log('3/3', 'Done');
+
   return {
     text: final,
     scores: {
