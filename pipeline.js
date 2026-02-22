@@ -123,17 +123,8 @@ async function rewriteWithExamples(apiKey, inputText, humanExamples, strength, s
     subtle: `You are lightly editing this to sound more natural and less machine-like. Adjust rhythm, break up smooth sentences, add small imperfections. Keep the structure mostly intact.`
   };
 
- const temps = { aggressive: 1.1, standard: 0.98, subtle: 0.80 };
-```
-
-Groq's LLaMA supports up to 2.0. Higher temperature = less statistically predictable token choices = lower perplexity scores on GPTZero.
-
-Also add this to the `surgicalScrub` system prompt — it's the most direct anti-GPTZero instruction:
-```
-PERPLEXITY HACK: For every 3 sentences, find one word that is completely correct 
-but slightly unexpected — not wrong, just the word a careful human would choose 
-rather than the word a language model would default to. Replace the predictable 
-word with the more interesting one.
+  // Higher temperatures = more unpredictable token choices = lower perplexity scores on GPTZero
+  const temps = { aggressive: 1.1, standard: 0.98, subtle: 0.80 };
 
   const examplesBlock = humanExamples.length > 0
     ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -154,47 +145,47 @@ ${shuffle(humanExamples).slice(0, 10).map((e, i) =>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 YOUR REWRITE MUST SOUND LIKE THESE EXAMPLES
-Not like an essay assistant. Like a real person who wrote these.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
     : `(No Reddit examples available — write purely from natural human voice intuition)`;
 
-  const styleBlock = styleProfile
-    ? buildStyleBlock(styleProfile)
-    : '';
+  const styleBlock = styleProfile ? buildStyleBlock(styleProfile) : '';
 
   const system = `${personas[strength]}
 
 ${examplesBlock}
 ${styleBlock}
 
-━━ RULES YOU MUST FOLLOW — READ ALL OF THESE ━━
+━━ RULES YOU MUST FOLLOW ━━
 
 MEANING: Preserve 100% of the original meaning. Every idea must stay. Nothing added, nothing removed.
 
-⚠️ WORD COUNT — THIS IS YOUR MOST IMPORTANT CONSTRAINT:
+WORD COUNT — HARD LIMIT:
 The original text is ${wordTarget} words. You MUST output between ${minWords} and ${maxWords} words.
-That is a hard limit. NOT a suggestion. Do not add examples, elaborations, or qualifications that weren't in the original.
-Do not pad. Do not expand. Replace ideas with ideas. One sentence in, one sentence out.
-Count your words as you write. If you go over ${maxWords}, cut before submitting.
+Do not add examples, elaborations, or qualifications that weren't in the original.
+Replace ideas with ideas. One sentence in, one sentence out.
+
+PERPLEXITY — HOW GPTZero DETECTS AI:
+GPTZero measures whether each word was the most statistically expected choice.
+AI always picks the safest, most predictable word. You must not do this.
+For every 3 sentences, find one word that is completely correct but slightly unexpected —
+not wrong, just the word a careful human would choose rather than the word a model defaults to.
+Replace the predictable word with the more interesting, specific, or unusual-but-natural one.
+Example: instead of "shows" use "makes clear" or "gives away". Instead of "important" use "the thing that matters here". Instead of "however" use "but here's the thing".
 
 SENTENCE LENGTH — MANDATORY BURSTINESS:
 For every group of 4 sentences, you MUST have:
   • At least 1 sentence under 8 words
   • At least 1 sentence over 25 words
-  • The rest varied (not all the same length)
-This is critical for bypassing AI detectors. Uniform sentence length = instant detection.
+  • The rest varied
 
-FRAGMENTS: Add at least 3 standalone fragment sentences — grammatically incomplete, standing alone. Like:
-  "Which is the whole problem."
-  "Not always."
-  "Worth thinking about."
-These replace existing sentences — they do NOT add to the word count.
+FRAGMENTS: Add at least 3 standalone fragment sentences that REPLACE existing sentences:
+  "Which is the whole problem."  /  "Not always."  /  "Worth thinking about."
 
-DASHES: Use at least 2 mid-thought interruptions with dashes — where you break your own sentence — before continuing.
+DASHES: Use at least 2 mid-thought interruptions — like this — before continuing.
 
-HEDGES: Include at least 2 genuine first-person hedges like "I think", "probably", "at least in my reading".
+HEDGES: Include at least 2 first-person hedges: "I think", "probably", "at least in my reading".
 
-BANNED WORDS — NEVER USE THESE:
+BANNED WORDS — NEVER USE:
 ${BANNED.join(', ')}
 
 BANNED OPENERS:
@@ -203,7 +194,7 @@ BANNED OPENERS:
 • "This demonstrates..." / "This highlights..."
 • "In conclusion," / "To summarize,"
 
-OUTPUT: Return ONLY the rewritten text. No preamble, no "Here is the rewrite:", nothing before or after.`;
+OUTPUT: Return ONLY the rewritten text. No preamble, nothing before or after.`;
 
   return await groq(apiKey, system, `Rewrite this text now:\n\n${inputText}`, temps[strength]);
 }
@@ -215,33 +206,37 @@ async function surgicalScrub(apiKey, text, humanExamples, originalWordCount) {
   const maxWords = Math.ceil(originalWordCount * 1.07);
 
   const problems = [];
-  if (burst < 0.48) problems.push(`BURSTINESS TOO LOW (${burst}, need ≥ 0.5) — sentence lengths are too uniform. Break 2-3 sentences into short ones (under 8 words). Expand 1-2 into long ones (25+ words). Do NOT add new content — restructure existing sentences.`);
+  if (burst < 0.48) problems.push(`BURSTINESS TOO LOW (${burst}, need >= 0.5) — break 2-3 sentences into short ones (under 8 words), expand 1-2 into long ones (25+ words). Restructure existing sentences, do NOT add new content.`);
   if (banned.length > 0) problems.push(`BANNED WORDS FOUND — replace each with a natural alternative: ${banned.join(', ')}`);
-  if (aiOpeners.length > 0) problems.push(`AI SENTENCE OPENERS FOUND — rewrite these so they don't start the AI way:\n${aiOpeners.slice(0, 4).map(s => `  • "${s.trim()}"`).join('\n')}`);
-  if (frags < 2) problems.push(`NOT ENOUGH FRAGMENTS (${frags} found, need ≥ 3) — convert 2 normal sentences into short standalone fragments. Replace, don't add.`);
+  if (aiOpeners.length > 0) problems.push(`AI SENTENCE OPENERS FOUND — rewrite these:\n${aiOpeners.slice(0, 4).map(s => `  • "${s.trim()}"`).join('\n')}`);
+  if (frags < 2) problems.push(`NOT ENOUGH FRAGMENTS (${frags} found, need >= 3) — convert 2 normal sentences into short standalone fragments. Replace, don't add.`);
 
   const examplesReminder = humanExamples.length > 0
-    ? `\nRemember: the target is writing that sounds like these Reddit examples:\n${shuffle(humanExamples).slice(0, 3).map(e => `"${e.text.slice(0, 150)}..."`).join('\n')}`
+    ? `\nTarget: writing that sounds like these Reddit examples:\n${shuffle(humanExamples).slice(0, 3).map(e => `"${e.text.slice(0, 150)}..."`).join('\n')}`
     : '';
 
-  const system = `You are an AI detection specialist making targeted surgical fixes. Fix ONLY the specific problems listed. Do not rewrite whole paragraphs unless required.
+  const system = `You are an AI detection specialist making targeted surgical fixes. Fix ONLY the specific problems listed.
 
-⚠️ WORD COUNT CONSTRAINT: The text must stay between ${minWords} and ${maxWords} words. When you fix something, replace — do not add. Every fix is a swap, not an addition.
+WORD COUNT CONSTRAINT: Text must stay between ${minWords} and ${maxWords} words. Every fix is a swap, not an addition.
+
+PERPLEXITY RULE: For every 3 sentences, find one word that is completely correct but slightly unexpected —
+the word a careful human would choose rather than the word a model defaults to.
+Replace the predictable word with the more interesting one. This directly lowers GPTZero scores.
 
 PROBLEMS TO FIX:
-${problems.length > 0 ? problems.map((p, i) => `${i + 1}. ${p}`).join('\n') : 'No critical problems — make the improvements below only:'}
+${problems.length > 0 ? problems.map((p, i) => `${i + 1}. ${p}`).join('\n') : 'No critical problems — make the improvements below:'}
 
-ALWAYS DO THESE 8 FIXES (by replacing existing content, not adding):
-1. Find the 3 most predictable word choices and replace them with less obvious but natural alternatives
-2. Find the 2 most "AI-sounding" sentences and rewrite them from scratch at the same length
-3. Find 2 technically-correct-but-no-real-person-would-say-this words and replace them
-4. Add 1 parenthetical aside (like this) by working it into an existing sentence
-5. Find any sentence that announces what the paragraph will say and cut or rewrite it
-6. Add 1 place where a statement is immediately qualified slightly — by editing an existing sentence
-7. Replace any remaining transition phrases with how a person would actually connect those ideas
-8. Make sure at least 1 sentence starts mid-thought with a dash or "I mean" or "or rather"${examplesReminder}
+ALWAYS DO THESE (replace existing content, do not add):
+1. Find the 3 most predictable word choices and swap them for less obvious but natural alternatives
+2. Rewrite the 2 most AI-sounding sentences from scratch at the same length
+3. Replace 2 technically-correct-but-no-real-person-would-say-this words
+4. Work 1 parenthetical aside (like this) into an existing sentence
+5. Cut or rewrite any sentence that just announces what the paragraph will say
+6. Edit 1 sentence so a statement is immediately qualified slightly
+7. Replace remaining transition phrases with how a person would actually connect those ideas
+8. Make at least 1 sentence start mid-thought with a dash or "I mean" or "or rather"${examplesReminder}
 
-Output ONLY the fixed text. No preamble, no explanation.`;
+Output ONLY the fixed text.`;
 
   return await groq(apiKey, system, `Fix this text:\n\n${text}`, 0.72);
 }
@@ -255,30 +250,27 @@ async function verifyAndFix(apiKey, text, originalText, humanExamples) {
 
   const exampleSnippets = shuffle(humanExamples).slice(0, 4).map(e => `"${e.text.slice(0, 200)}"`).join('\n');
 
-  const system = `You are a ruthless AI text detector reviewing a piece of writing. Find every remaining trace of AI writing and fix it.
-
-Read this text as if you are running GPTZero and Turnitin. Find everything that would flag it.
+  const system = `You are a ruthless AI text detector. Find every remaining trace of AI writing and fix it.
 
 What to look for:
-1. Sentences where every word is the most expected, statistically safe choice — rewrite with less predictable but still natural word choices
-2. Paragraphs that flow too smoothly — real human writing has bumps, asides, self-corrections
-3. Any remaining formulaic structure: topic sentence → supporting details → conclusion
-4. Sentences that all end with a full stop and complete thought — fragments are missing
-5. Vocabulary that is "technically correct but suspiciously polished" — replace with messier, realer choices
-6. Any place where the writer sounds like they are demonstrating their thesis rather than thinking
-7. Missing personality — the reader should feel like a specific person wrote this
+1. Sentences where every word is the most statistically expected choice — rewrite with less predictable but natural choices
+2. Paragraphs that flow too smoothly — add bumps, asides, self-corrections
+3. Remaining formulaic structure: topic sentence + supporting details + conclusion
+4. All sentences ending with a full stop and complete thought — add fragments
+5. Vocabulary that is "technically correct but suspiciously polished"
+6. Writer demonstrating a thesis rather than thinking through it
+7. Missing personality — reader should feel like a specific person wrote this
 
-${humanExamples.length > 0 ? `Real human writing on this topic sounds like this:\n${exampleSnippets}` : ''}
+${humanExamples.length > 0 ? `Real human writing on this topic:\n${exampleSnippets}` : ''}
 
-Current text problems:
-- Burstiness: ${burst} ${burst < 0.5 ? '(TOO LOW — fix sentence length variation)' : '(ok)'}
-- Banned words still present: ${banned.length > 0 ? banned.join(', ') : 'none'}
-- AI openers still present: ${aiOpeners.length > 0 ? aiOpeners.slice(0, 3).map(s => s.trim()).join(' | ') : 'none'}
+Current problems:
+- Burstiness: ${burst} ${burst < 0.5 ? '(TOO LOW)' : '(ok)'}
+- Banned words: ${banned.length > 0 ? banned.join(', ') : 'none'}
+- AI openers: ${aiOpeners.length > 0 ? aiOpeners.slice(0, 3).map(s => s.trim()).join(' | ') : 'none'}
 
-⚠️ WORD COUNT CONSTRAINT: Original was ${originalWordCount} words. Output must be between ${minWords} and ${maxWords} words.
-When fixing, swap content — do not add new content. Every change is a replacement.
+WORD COUNT CONSTRAINT: Original was ${originalWordCount} words. Output must be between ${minWords} and ${maxWords} words. Swap, do not add.
 
-Output ONLY the corrected text. Nothing else.`;
+Output ONLY the corrected text.`;
 
   return await groq(apiKey, system, `Review and fix this text:\n\n${text}`, 0.78);
 }
@@ -293,19 +285,16 @@ async function enforceBurstiness(apiKey, text, originalWordCount) {
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
 
-  const system = `You are fixing sentence length variation in this text. The burstiness score is ${burst} — it needs to be at least 0.5.
-
-Current average sentence length: ~${Math.round(avg)} words.
+  const system = `Fix sentence length variation. Burstiness is ${burst} — needs to be at least 0.5.
+Average sentence length: ~${Math.round(avg)} words.
 
 DO THIS:
-1. Find the 4 longest sentences and break each into 2 shorter ones (one under 10 words, one normal)
-2. Find the 4 most similar-length sentences and vary them dramatically
-3. Turn 3 full sentences into fragments — short, punchy, incomplete, under 6 words each
-4. Combine 2 pairs of short sentences into longer flowing ones (25+ words)
+1. Break the 4 longest sentences each into 2 (one under 10 words, one normal)
+2. Vary the 4 most similar-length sentences dramatically
+3. Turn 3 full sentences into fragments under 6 words each
+4. Combine 2 pairs of short sentences into longer ones (25+ words)
 
-⚠️ Keep output between ${minWords} and ${maxWords} words. Restructure sentences — do not add new content.
-Keep 100% of the meaning.
-
+Keep output between ${minWords} and ${maxWords} words. Restructure — do not add new content.
 Output ONLY the fixed text.`;
 
   return await groq(apiKey, system, text, 0.65);
@@ -320,31 +309,27 @@ async function enforceWordCount(apiKey, text, originalWordCount) {
   if (currentWC >= minWords && currentWC <= maxWords) return text;
 
   const delta = currentWC - originalWordCount;
-  const action = delta > 0 ? 'too long' : 'too short';
-  console.log(`  → Word count ${action}: ${currentWC} vs target ${originalWordCount} — correcting...`);
 
   if (delta > 0) {
-    // Need to trim
-    const system = `This text is ${currentWC} words but needs to be between ${minWords} and ${maxWords} words (original was ${originalWordCount} words).
+    const system = `This text is ${currentWC} words but needs to be between ${minWords} and ${maxWords} words (original: ${originalWordCount}).
 
-Trim it by:
-1. Removing redundant phrases and filler (e.g. "in order to" → "to", "the fact that" → cut)
-2. Shortening overly long sentences without changing their meaning
-3. Cutting any elaborations or repetitions that weren't in the original
-4. Do NOT cut any ideas, arguments, or key points — only cut padding and redundancy
+Trim by:
+1. Removing filler phrases ("in order to" → "to", "the fact that" → cut)
+2. Shortening overly long sentences without changing meaning
+3. Cutting elaborations that weren't in the original
+Do NOT cut any ideas or key points.
 
-Output ONLY the trimmed text. No explanation.`;
+Output ONLY the trimmed text.`;
     return await groq(apiKey, system, text, 0.4, maxWords * 2);
   } else {
-    // Need to expand (rare, but handle it)
-    const system = `This text is ${currentWC} words but needs to be between ${minWords} and ${maxWords} words (original was ${originalWordCount} words).
+    const system = `This text is ${currentWC} words but needs to be between ${minWords} and ${maxWords} words (original: ${originalWordCount}).
 
-Expand it slightly by:
-1. Adding a short concrete detail or example to 1-2 existing points
+Expand slightly by:
+1. Adding a short concrete detail to 1-2 existing points
 2. Expanding a fragment or very short sentence into a fuller thought
-3. Do NOT add new arguments or change any existing ideas
+Do NOT add new arguments or change existing ideas.
 
-Output ONLY the expanded text. No explanation.`;
+Output ONLY the expanded text.`;
     return await groq(apiKey, system, text, 0.5, maxWords * 2);
   }
 }
@@ -356,7 +341,7 @@ function buildStyleBlock(profile) {
   const s = (profile.summary || '').toLowerCase();
 
   if (s.includes('never start sentences with conjunctions')) {
-    rules.push('NEVER start sentences with "And", "But", "So", "Or", "Yet" — scan every sentence before returning');
+    rules.push('NEVER start sentences with "And", "But", "So", "Or", "Yet"');
   } else if (s.includes('often start')) {
     rules.push('Feel free to start sentences with "And", "But", or "So"');
   }
@@ -365,7 +350,7 @@ function buildStyleBlock(profile) {
   } else if (s.includes('always use contractions')) {
     rules.push("Use contractions freely — it's, don't, can't, I'm, they're");
   }
-  if (s.includes('very casual')) rules.push('Very casual tone — like talking to a friend, not writing for a professor');
+  if (s.includes('very casual')) rules.push('Very casual tone — like talking to a friend');
   if (s.includes('formal and precise')) rules.push('Formal and precise tone throughout');
   if (s.includes('short and punchy')) rules.push('Keep most sentences under 14 words');
   if (s.includes('long and detailed')) rules.push('Use longer flowing sentences');
@@ -424,10 +409,9 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
     currentWC = wc(result);
     log('5/6', `After burstiness fix: ${currentWC} words | burstiness=${scores.burst}`);
   } else {
-    log('5/6', `Burstiness OK (${scores.burst}) — skipping length pass`);
+    log('5/6', `Burstiness OK (${scores.burst}) — skipping`);
   }
 
-  // ── Final word count check — always run this ─────────────────────────────
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
   currentWC = wc(result);
