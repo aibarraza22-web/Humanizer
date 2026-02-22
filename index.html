@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Humanizer v8</title>
+<title>Humanizer v12</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Epilogue:ital,wght@0,300;0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -110,13 +110,11 @@ select:focus{border-color:var(--accent)}
 
 /* answer tab */
 .answer-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;background:var(--s1)}
-.answer-box:focus-within{border-color:var(--border2)}
 .answer-out{min-height:200px;padding:16px;font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.76;color:var(--text2);white-space:pre-wrap;cursor:default}
 .answer-placeholder{color:var(--dim);font-style:italic}
 .q-input{width:100%;padding:14px 16px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.6;resize:vertical;outline:none;min-height:80px}
 .q-input:focus{border-color:var(--accent)}
 .q-input::placeholder{color:var(--dim);font-style:italic}
-.answer-scores{display:flex;gap:7px;flex-wrap:wrap}
 
 /* style tab */
 .style-desc{font-size:0.83rem;color:#555580;line-height:1.65;max-width:580px}
@@ -163,7 +161,7 @@ select:focus{border-color:var(--accent)}
 <header>
   <div class="logo">
     <h1>Human<em>izer</em></h1>
-    <span class="chip">v8</span>
+    <span class="chip">v12</span>
   </div>
   <div class="key-row">
     <div class="key-wrap">
@@ -185,17 +183,17 @@ select:focus{border-color:var(--accent)}
   <!-- HUMANIZE TAB -->
   <div id="tab-main" class="panel active">
     <div class="steps">
-      <div class="step active" id="step1"><div class="sdot">1</div><span>Topic</span></div>
+      <div class="step active" id="step1"><div class="sdot">1</div><span>Examples</span></div>
       <div class="sline"></div>
-      <div class="step" id="step2"><div class="sdot">2</div><span>Reddit</span></div>
+      <div class="step" id="step2"><div class="sdot">2</div><span>Analyze</span></div>
       <div class="sline"></div>
       <div class="step" id="step3"><div class="sdot">3</div><span>Rewrite</span></div>
       <div class="sline"></div>
-      <div class="step" id="step4"><div class="sdot">4</div><span>Splice</span></div>
+      <div class="step" id="step4"><div class="sdot">4</div><span>Fix #1</span></div>
       <div class="sline"></div>
-      <div class="step" id="step5"><div class="sdot">5</div><span>Scrub</span></div>
+      <div class="step" id="step5"><div class="sdot">5</div><span>Fix #2</span></div>
       <div class="sline"></div>
-      <div class="step" id="step6"><div class="sdot">6</div><span>Verify</span></div>
+      <div class="step" id="step6"><div class="sdot">6</div><span>Fix #3</span></div>
       <div class="sline"></div>
       <div class="step" id="step7"><div class="sdot">7</div><span>Finalize</span></div>
     </div>
@@ -237,7 +235,7 @@ select:focus{border-color:var(--accent)}
     <div class="status" id="statusEl"><div class="s-dot"></div><span id="statusElMsg">Ready — paste text and enter your Mistral API key</span></div>
 
     <div class="ex-panel" id="exPanel">
-      <div class="ex-title">Real Reddit examples used this run</div>
+      <div class="ex-title">Human examples used this run</div>
       <div id="exContent"></div>
     </div>
   </div>
@@ -267,7 +265,7 @@ select:focus{border-color:var(--accent)}
       <div class="answer-out answer-placeholder" id="answerOutput">Your answer appears here...</div>
     </div>
 
-    <div class="answer-scores score-row" id="answerScoreRow" style="display:none">
+    <div class="score-row" id="answerScoreRow" style="display:none">
       <div class="scard"><div class="sc-l">AI words found</div><div class="sc-v" id="aWords">—</div></div>
       <div class="scard"><div class="sc-l">AI openers</div><div class="sc-v" id="aOpeners">—</div></div>
       <div class="scard"><div class="sc-l">Burstiness</div><div class="sc-v" id="aBurst">—</div></div>
@@ -329,8 +327,8 @@ select:focus{border-color:var(--accent)}
   <!-- TIPS TAB -->
   <div id="tab-tips" class="panel">
     <div class="tips-grid">
-      <div class="tip"><div class="tip-n">01</div><h3>Trained on real data</h3><p>The pipeline is trained on a real human vs AI dataset — it knows exactly what patterns to write toward and which ones to avoid. It's not guessing at "casual" — it has real examples.</p></div>
-      <div class="tip"><div class="tip-n">02</div><h3>7-pass pipeline</h3><p>Topic → Reddit scrape → Rewrite → Splice real sentences → Scrub AI patterns → Verify → Fix word count. Each pass targets something specific.</p></div>
+      <div class="tip"><div class="tip-n">01</div><h3>Trained on real data</h3><p>The pipeline uses a real human vs AI dataset plus 6 real answers as voice examples. It knows what human writing looks like — it's not guessing at "casual".</p></div>
+      <div class="tip"><div class="tip-n">02</div><h3>Iterative fix loop</h3><p>Load examples → Analyze → Rewrite → 3 rounds of targeted fixes. Each fix round finds what's STILL detecting as AI and fixes only those things — long sentences, dramatic phrases, essay structure, uniform rhythm.</p></div>
       <div class="tip"><div class="tip-n">03</div><h3>Answer as Me</h3><p>Use the Answer tab for discussion posts, short answers, or any question you need to respond to. It answers the way you'd answer — direct, confident, no hedging.</p></div>
       <div class="tip"><div class="tip-n">04</div><h3>Make a few edits yourself</h3><p>Change 2–3 sentences to exactly how you'd write them. Genuinely human text no AI can replicate. The single biggest improvement you can make.</p></div>
       <div class="tip"><div class="tip-n">05</div><h3>Works on research papers too</h3><p>Paste sections of a research paper — the pipeline preserves all your citations, evidence, and arguments while rewriting the prose to sound human.</p></div>
@@ -374,7 +372,7 @@ function setStep(n) {
     else if (i === n) el.classList.add('active');
   }
 }
-const stepForMsg = msg => { const m = msg.match(/(\d)\/7/); return m ? parseInt(m[1]) : null; };
+const stepForMsg = msg => { const m = msg.match(/^(\d)\/7/); return m ? parseInt(m[1]) : null; };
 const progForStep = n => [0, 8, 18, 35, 50, 65, 80, 92][n] || 0;
 
 function addLog(panelId, msg, state='active') {
@@ -417,7 +415,7 @@ async function run() {
   document.getElementById('logPanel').classList.remove('show');
 
   showProg('prog'); setProg('progFill', 3); setStep(1);
-  setStatus('statusEl', 'Running 7-pass pipeline...', 'working');
+  setStatus('statusEl', 'Running pipeline...', 'working');
 
   try {
     const response = await fetch('/humanize', {
@@ -443,8 +441,7 @@ async function run() {
         try { event = JSON.parse(line.slice(6)); } catch { continue; }
 
         if (event.type === 'progress') {
-          const fullMsg = `[${event.step}] ${event.msg}`;
-          addLog('logPanel', fullMsg);
+          addLog('logPanel', `[${event.step}] ${event.msg}`);
           const stepNum = stepForMsg(event.step);
           if (stepNum) { setStep(stepNum); setProg('progFill', progForStep(stepNum)); }
 
@@ -467,11 +464,11 @@ async function run() {
           if (s.humanExampleSources?.length) {
             document.getElementById('exContent').innerHTML =
               `<div class="ex-item"><span class="ex-tag">sources</span>${s.humanExampleSources.join(', ')}</div>
-               <div class="ex-item"><span class="ex-tag">count</span>${s.examplesUsed} real Reddit paragraphs used</div>`;
+               <div class="ex-item"><span class="ex-tag">count</span>${s.examplesUsed} human sentences from dataset</div>`;
             document.getElementById('exPanel').className = 'ex-panel show';
           }
           setStep(7); hideProg('prog');
-          setStatus('statusEl', 'Done — ' + s.examplesUsed + ' Reddit examples used. Make 1–2 of your own edits for best results.', 'ok');
+          setStatus('statusEl', 'Done — make 1–2 of your own edits for best results.', 'ok');
           addLog('logPanel', 'Complete ✓', 'done');
 
         } else if (event.type === 'error') {
@@ -539,13 +536,11 @@ async function answer() {
           outEl.textContent = event.text;
           outEl.classList.remove('answer-placeholder');
           document.getElementById('answerWC').textContent = wc(event.text) + ' words';
-
           const s = event.scores;
           sc('aWords', s.bannedWordsFound.length === 0 ? '✓ clean' : s.bannedWordsFound.length + ' found', s.bannedWordsFound.length === 0 ? 'g' : 'b');
           sc('aOpeners', s.aiOpenersFound === 0 ? '✓ none' : s.aiOpenersFound + ' found', s.aiOpenersFound === 0 ? 'g' : 'b');
           sc('aBurst', s.burstiness >= 0.4 ? '✓ ' + s.burstiness : '~ ' + s.burstiness, s.burstiness >= 0.4 ? 'g' : 'm');
           sc('aWC', s.wordCount + ' words', 'g');
-
           document.getElementById('answerScoreRow').style.display = 'flex';
           hideProg('answerProg');
           setStatus('answerStatus', 'Done.', 'ok');
@@ -602,11 +597,7 @@ async function saveFromSample() {
 function saveFromQuiz() {
   const get = n => { const e = document.querySelector(`input[name="${n}"]:checked`); return e ? e.value : ''; };
   const extra = document.getElementById('qExtra').value.trim();
-  styleProfile = {
-    type: 'quiz',
-    summary: [get('q1'),get('q3'),extra].filter(Boolean).join(' | '),
-    examples: null
-  };
+  styleProfile = { type: 'quiz', summary: [get('q1'), get('q3'), extra].filter(Boolean).join(' | '), examples: null };
   updateBadge('✓ Style saved from quiz');
 }
 
