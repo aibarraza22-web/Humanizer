@@ -1,15 +1,19 @@
-// pipeline.js — Humanizer v14
-// Key addition: hardScrub() — regex-based post-processing that catches
-// AI-trying-to-sound-casual patterns before output leaves the pipeline.
-// These patterns (rhetorical questions, one-word sentences, "here's the twist" etc.)
-// are NOT caught by the LLM passes because the LLM invents them itself.
+// pipeline.js — Humanizer v15
+// Dataset: Human vs AI writing by Aiden vs ChatGPT vs Claude
+// AIDEN_EXAMPLES = all Aiden answers — write LIKE these
+// AI_COUNTER_EXAMPLES = ChatGPT + Claude answers — write NOTHING like these
+// hardScrub() = regex post-processor catching AI casual patterns
 
 import fetch from 'node-fetch';
 
 const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MODEL = 'mistral-large-latest';
 
-// ─── Aiden's real answers — gold standard voice ───────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  AIDEN'S REAL ANSWERS — WRITE LIKE THESE
+//  These are all 100% human. Direct, personal, opinionated, loose reasoning.
+//  "Even when the reasoning is loose" — that's the key. Don't over-connect.
+// ═══════════════════════════════════════════════════════════════════
 const AIDEN_EXAMPLES = [
   {
     question: "How is AI changing the way startups compete in finance?",
@@ -34,13 +38,61 @@ const AIDEN_EXAMPLES = [
   {
     question: "Will AI determine global superpower status?",
     answer: `AI will determine global superpower status. Global superpower status will be determined by who is leading in advancements. Whoever is leading in advancements, everyone else will need them. Whoever has what everyone needs will be a superpower. To remain the world's only super power, America must focus on being on the front lines advancing AI and do everything we can so no one comes close. Whoever leads in AI will gain global superpower status.`
+  },
+  {
+    question: "What is AI?",
+    answer: `AI stands for artificial intelligence. AI is a technology that allows computers, or anything artificial, to do things similar to human intelligence. AI has been used for a long time like using Machine Learning. For example, machine learning is just giving a computer 100 pictures of apples and 100 pictures of bananas and training it to figure out what the next picture is. What has become much more popular from AI is LLMs, or large language models, things like ChatGPT, Gemini, Claude. These use context to predict what its not letter, word, sentence, paragraph will be. They are trained on the whole internet and use the context of your prompt to decide what should come next in its answer. AI is an umbrella term for many things that are simulating human intelligence.`
+  },
+  {
+    question: "Will AI take my job?",
+    answer: `AI will not just take jobs. It make some tasks automated, much easier, or different. That does not mean they will just go away or that everyone will be unemployed. AI will definitely shift jobs though. It can actually make your job a lot better for you. You will shift to managing AI to do your job, directing it, and watching over it. We have seen many examples of this with technological advancements in history. For example, when the computer came, not all the mathmeticians got wiped out, there job just got shifted. In the end, AI will not take you job but shift your job.`
+  },
+  {
+    question: "Can AI be conscious?",
+    answer: `I think wether AI could be conscious entirely depends on your definitely of consciousness. Honestly, human brains seem like just complex computers with nuearl networks, and if we are replicating that in real life why cant they me just like us. They different I think is natural lived experience, but once complex robots with chatbots come in, there may be no difference. I think there is this human inclination to say no Ai can never be like us, or be conscious, but when you really think about it, how are they different then us. As long as they have complex neural networks, which we are making them just like the human brain, how are they different from us? Humans have a creator, AI has a creator. Humans evolve and grow, AI evolves and grows. Honestly, at a certain point I definitely think AI can be conscious. At a certain point of simulationg something artificially to be so similar to the human brain, there can be no difference. They don't have things like emotions, or the full human brain so they are not conscious. Thats just for now though.`
   }
 ];
 
-// ─── Proven human examples ────────────────────────────────────────────────────
-const HUMAN_EXAMPLE_86 = `Finance, startups, and AI are all coming together right now. In finance, AI can help predict markets and analyze lots of data a lot faster than any human ever could. Even more, startups are using AI to build financial tools all by themselves. Someone can now just create a trading model, or a budgeting app, or a risk engine that used to require a giant bank that used to take hundreds of people. That changes everything and now speed and creativity from one person mean so much more than hundreds of people used to. Although, AI does not do this on its own. It still needs the human to push it and manage it. When someone with real financial knowledge gets a hold of these new AI tools. They can be unstoppable, stronger than hundreds of employees just a few months ago. This is not about getting rid of people, but about giving ambitious startup founders the ability to build.`;
-
-const HUMAN_EXAMPLE_72 = `Currently, finance, startups, and AI are all coming together. This will reshape whole industries and create new opportunities for everyone. They are merging and being able to connect with each other. AI is changing finance because it can predict market trends all by itself. Also, it can see fraud in real-time, handle risk assessment, and go through lots of data faster than any human possibly could. Startups are using AI to build things that were once only possible for large corporations with tons of employees. Now, just one human can make advanced trading models and budgeting apps all by themselves by just using the help of AI. Speed and creativity are starting the matter more that just employees and company size. This allows startups to be able to adapt and outmaneuver larger and slower competitors. However, AI cannot do all this alone. You need a human, knowledgeable in finance, to properly manage the AI. This isn't about replacing anyone but about making all humans be able to build big things themselves. With the help of AI, the future can help us build whatever we want.`;
+// ═══════════════════════════════════════════════════════════════════
+//  AI COUNTER-EXAMPLES — DO NOT WRITE LIKE THESE
+//  These are ChatGPT and Claude answers from the same dataset.
+//  Showing the model exactly what to avoid is as important as showing
+//  it what to aim for.
+// ═══════════════════════════════════════════════════════════════════
+const AI_COUNTER_EXAMPLES = [
+  {
+    label: "ChatGPT — structured, numbered lists, balanced, no personality",
+    sample: `First, analysis is getting automated at scale. Startups can now process earnings calls, SEC filings, alternative data, satellite imagery, transaction flows, and macro signals in real time using machine learning. Second, prediction quality is becoming the edge. AI allows startups to build forecasting engines for credit risk, fraud detection, underwriting, and trading strategies that adapt continuously. Third, personalization is becoming scalable. Fourth, automation is flattening operational costs. Fifth, data moats are shifting.`
+  },
+  {
+    label: "ChatGPT — measured, hedged, no position taken",
+    sample: `Over the next 20 years, artificial intelligence will likely both replace and create jobs, but most economists expect it to create new categories of work even as it automates existing tasks. Historically, major technologies like electricity and the internet displaced workers in the short term but expanded the overall economy and created more complex, higher-skilled work over time.`
+  },
+  {
+    label: "ChatGPT — balanced both sides, never commits",
+    sample: `The United States faces a constant balance between strengthening itself at home and projecting power abroad, and most serious policy debates are really about how to prioritize both, not choosing one exclusively. The most sustainable approach is strengthening domestic capacity while remaining strategically engaged internationally.`
+  },
+  {
+    label: "Claude — long, nuanced, maps competing perspectives, qualifiers everywhere",
+    sample: `This is one of the most contested questions in economics right now, and the truth is nobody knows with confidence. History offers some reassurance — past waves of automation ultimately created more jobs than they destroyed. The optimistic case holds that AI will follow the same pattern. The pessimistic case argues that this time is genuinely different. Most economists land somewhere in the middle.`
+  },
+  {
+    label: "Claude — intellectually careful, lots of 'however' and 'but'",
+    sample: `Not automatically, though the relationship is real and historically significant. Technological advantage has repeatedly translated into geopolitical power. But technological leadership doesn't mechanically convert into lasting political dominance for several reasons. First, technology diffuses. Second, political power depends on many things technology can't easily buy. Third, the nature of the technology matters.`
+  },
+  {
+    label: "Claude — colon lists, headers, comprehensive",
+    sample: `AI is reshaping startup competition in financial services in some pretty fundamental ways. Here's what's driving the shift: Leveling the playing field on data — Traditionally, incumbents had a massive moat. Credit and underwriting — This is probably where AI has had the sharpest impact. Cost structure compression — AI-driven automation lets fintech startups operate with dramatically leaner teams.`
+  },
+  {
+    label: "ChatGPT — right now AI is not conscious, definitive but flat",
+    sample: `Right now, AI is not conscious. It can process information, recognize patterns, and generate responses that sound thoughtful, but it does not have self-awareness, emotions, subjective experience, or an inner sense of being. Some researchers debate whether advanced systems could ever develop forms of machine consciousness in the future, but there is no scientific evidence that today's AI has genuine awareness rather than sophisticated pattern recognition.`
+  },
+  {
+    label: "Claude — open question framing, philosophical hedging",
+    sample: `Nobody knows, and the question is deeper and harder than it might first appear. Consciousness remains one of the least understood phenomena in science and philosophy. The hard problem is that there's no clear test for consciousness — you can't measure it from the outside the way you can measure temperature or speed. It's a genuinely open question, which is either exciting or unsettling depending on how you look at it.`
+  }
+];
 
 // ─── Banned words ─────────────────────────────────────────────────────────────
 const BANNED = [
@@ -86,71 +138,51 @@ const AI_OPENERS = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════
-//  HARD SCRUB — regex-based, runs on every pass output
-//  Catches patterns the LLM invents when trying to sound casual.
-//  These are NOT caught by the LLM passes because the model generates them.
-//  No API call — pure string manipulation.
+//  HARD SCRUB — regex post-processor, runs on every LLM output
+//  Catches AI-trying-to-sound-casual patterns the model generates itself
 // ═══════════════════════════════════════════════════════════════════
 function hardScrub(text) {
   let t = text;
 
-  // ── Em dashes ──────────────────────────────────────────────────
-  // Replace — with period + capitalize next word
+  // Em dashes → period + new sentence
   t = t.replace(/\s*—\s*/g, '. ');
 
-  // ── "Here's the X:" setup phrases ─────────────────────────────
-  // "Here's the real twist:" / "Here's the thing:" / "Here's the deal:"
+  // "Here's the X:" setup phrases
   t = t.replace(/here's the (real |)?(twist|thing|deal|catch|key|truth|problem|issue|point)[:\s]/gi, 'The thing is, ');
   t = t.replace(/but here's (the |)(real |)?(twist|thing|deal|catch|key|truth)[:\s]/gi, 'But the thing is, ');
+  t = t.replace(/here's (what|why|how)[:\s]/gi, '');
+  t = t.replace(/the (bottom line|key takeaway|main point|real answer)[:\s]/gi, 'The main point is ');
 
-  // ── Rhetorical questions followed by answer ────────────────────
-  // "The old barriers? Yeah, they're gone." → "The old barriers are pretty much gone."
-  // "Size? Doesn't matter." → "Size doesn't really matter."
+  // Rhetorical questions + answer pattern
   t = t.replace(/([A-Z][^.!?]{2,30})\?\s+(Yeah,?\s+)?(they're|it's|that's|he's|she's|we're|they are|it is)/gi,
     (match, subject, yeah, verb) => `${subject} ${verb}`);
-  t = t.replace(/([A-Z][^.!?]{2,30})\?\s+(Yeah,?\s+)?/gi, (match, subject) => `${subject}. `);
+  t = t.replace(/\b(Now|Why|How|What|When|Where)\?\s+/g, '');
 
-  // ── One-word or two-word dramatic sentences ────────────────────
-  // "Unstoppable." / "Remarkable." / "Game-changing." / "Period."
-  const dramaticOneWordSentences = [
-    'Unstoppable', 'Remarkable', 'Extraordinary', 'Revolutionary', 'Transformative',
-    'Unprecedented', 'Incredible', 'Unbelievable', 'Fascinating', 'Stunning',
-    'Period', 'Full stop', 'Simple as that', 'End of story', 'Case closed',
-    'Mind-blowing', 'Mind blowing', 'Game-changing', 'Game changing',
-    'That simple', 'That easy', 'That big'
+  // One-word dramatic standalone sentences
+  const dramaticOneWord = [
+    'Unstoppable','Remarkable','Extraordinary','Revolutionary','Transformative',
+    'Unprecedented','Incredible','Unbelievable','Fascinating','Stunning',
+    'Period','Full stop','Simple as that','End of story','Case closed',
+    'Mind-blowing','Game-changing','Game changing','That simple','That easy','That big'
   ];
-  for (const word of dramaticOneWordSentences) {
-    // Match as standalone sentence (preceded by period/newline, followed by period/newline)
+  for (const word of dramaticOneWord) {
     const pattern = new RegExp(`(\\.|\\n|^)\\s*${word}\\.\\s*`, 'gi');
     t = t.replace(pattern, (match, pre) => `${pre} `);
   }
 
-  // ── "Now?" / "Why?" / rhetorical one-word questions ───────────
-  t = t.replace(/\b(Now|Why|How|What|When|Where)\?\s+/g, '');
-
-  // ── Colon setups ───────────────────────────────────────────────
-  // "But here's what's changed: startups..." → "But startups..."
+  // Colon list setups mid-sentence
   t = t.replace(/[Bb]ut here's what('s| has) changed:\s*/g, 'But ');
-  t = t.replace(/[Tt]he real (reason|answer|point|difference|advantage) (is|here) is:\s*/g, 'The real point is ');
   t = t.replace(/[Hh]ere's why:\s*/g, 'Because ');
   t = t.replace(/[Hh]ere's how:\s*/g, '');
-  t = t.replace(/[Tt]he (bottom line|key takeaway|main point):\s*/g, 'The main point is ');
 
-  // ── "Not X. Y." dramatic contrast sentences ───────────────────
-  // "Not replacing people. Empowering them." → "It's not about replacing people, it's about empowering them."
+  // Dramatic contrast sentences "Not X. Y them."
   t = t.replace(/\bNot (replacing|removing|eliminating|cutting|reducing)\s+([^.]+)\.\s+([A-Z][^.]+ing)\s+them\./g,
     "It's not about $1 $2. It's about $3 them.");
 
-  // ── Trailing dramatic closers ──────────────────────────────────
-  t = t.replace(/\b(The barriers are gone|The old barriers\?[^.]*)\./gi, 'The barriers are a lot lower now.');
-  t = t.replace(/\bThe (old |)(rules|game|world|landscape) (has |have |)(changed|shifted)\./gi, 'Things have changed a lot.');
-
-  // ── Clean up double spaces and double periods from replacements ─
+  // Clean up
   t = t.replace(/\.\.+/g, '.');
   t = t.replace(/\s{2,}/g, ' ');
   t = t.replace(/\.\s*\./g, '.');
-
-  // ── Capitalize first letter after period if lowercased ─────────
   t = t.replace(/\.\s+([a-z])/g, (m, c) => `. ${c.toUpperCase()}`);
 
   return t.trim();
@@ -239,7 +271,7 @@ function detectProblems(text) {
   const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 0);
 
   const structuredParaPatterns = [
-    /^(AI is|Finance is|Startups are|The future|This shift|This democratizes|This allows|This enables)/i,
+    /^(AI is|Finance is|Startups are|The future|This shift|This allows|This enables)/i,
     /^[A-Z][^.!?]+(revolutionizing|reshaping|transforming|enabling|empowering)/i,
     /^(In this|In today's|In the current|In recent)/i,
   ];
@@ -284,6 +316,19 @@ async function enforceWordCount(apiKey, text, targetWC) {
   }
 }
 
+// Build the full positive + negative example blocks for prompts
+function buildExampleBlocks(numPositive = 4, numNegative = 3) {
+  const positiveBlock = AIDEN_EXAMPLES.slice(0, numPositive)
+    .map((e, i) => `[HUMAN EXAMPLE ${i + 1} — Q: "${e.question}"]\n"${e.answer}"`)
+    .join('\n\n');
+
+  const negativeBlock = AI_COUNTER_EXAMPLES.slice(0, numNegative)
+    .map((e, i) => `[AI EXAMPLE ${i + 1} — ${e.label}]\n"${e.sample}"`)
+    .join('\n\n');
+
+  return { positiveBlock, negativeBlock };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  STEP 3: Initial rewrite
 // ═══════════════════════════════════════════════════════════════════
@@ -292,8 +337,7 @@ async function initialRewrite(apiKey, inputText, inputType, strength, styleProfi
   const minWords = Math.floor(wordTarget * 0.93);
   const maxWords = Math.ceil(wordTarget * 1.07);
   const temps = { aggressive: 0.92, standard: 0.82, subtle: 0.70 };
-
-  const allAidenText = AIDEN_EXAMPLES.map((e, i) => `[HUMAN EXAMPLE ${i + 1}]\n"${e.answer}"`).join('\n\n');
+  const { positiveBlock, negativeBlock } = buildExampleBlocks(4, 3);
   const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
 
   const extraGuidance = inputType === 'analysis'
@@ -305,64 +349,60 @@ Reframe explanations as personal reactions. Sound like someone telling you somet
 Take a clear side. State it at the start. Repeat it at the end.
 Use "I" and "we" naturally. Say what you actually think, directly.`;
 
-  const system = `You are rewriting text to pass GPTZero AI detection. Your output must look like it was typed by a real student.
+  const system = `You are rewriting text to pass GPTZero AI detection. Your output must look like it was typed by a real student — specifically this student named Aiden.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TWO REAL OUTPUTS THAT PASSED GPTZERO — WRITE EXACTLY LIKE THESE
+AIDEN'S REAL WRITING — WRITE EXACTLY LIKE THIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${positiveBlock}
 
-EXAMPLE 1 — scored 86% human:
-"${HUMAN_EXAMPLE_86}"
-
-EXAMPLE 2 — scored 72% human:
-"${HUMAN_EXAMPLE_72}"
-
-WHY THESE PASS:
-• Short sentences — most are 8–14 words
-• Casual imperfect phrases: "lots of", "all by themselves", "tons of", "way faster", "by just using"
-• Slightly off grammar is fine — real people write this way
-• Flows as one stream of thought — NOT organized paragraphs with topic sentences
-• Short punchy statements mixed in: "That changes everything." / "Anyone can do this now."
-
-WHAT STILL GETS DETECTED EVEN WHEN "CASUAL" — DO NOT WRITE LIKE THIS:
-"But here's the real twist: startups are using it..." → DETECTED. "Here's the X:" is an AI setup phrase.
-"Unstoppable." as a standalone sentence → DETECTED. One-word dramatic sentences = AI.
-"The old barriers? Yeah, they're pretty much gone." → DETECTED. Rhetorical question + yeah = AI.
-"It's not about replacing people. Empowering them." → DETECTED. Dramatic two-part contrast = AI.
-"Size doesn't matter as much anymore—speed and creativity matter way more" → DETECTED. Em dash mid-sentence = AI.
-"That's why startups can outrun the big, slow companies." → DETECTED. "outrun" = dramatic.
+WHY AIDEN'S WRITING PASSES GPTZERO:
+• Short direct sentences — gets to the point immediately
+• Takes a strong position and repeats it — no hedging, no "on the other hand"
+• Personal references: "When I start my startup...", "I think..."
+• Slightly loose reasoning — not every sentence perfectly connects to the next (this is KEY)
+• Casual imperfect phrases: "lots of funding", "anyone and everyone", "way behind"
+• Real specific examples from his own life or knowledge
+• Writes the way people actually talk, not the way people write essays
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MORE REAL HUMAN VOICE EXAMPLES
+AI WRITING — NEVER WRITE LIKE THIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${allAidenText}
+${negativeBlock}
+
+WHY AI WRITING FAILS GPTZERO:
+• Numbered lists: "First... Second... Third..." = instant AI detection
+• Balanced both sides: "On one hand... on the other hand..." = AI trying to be fair
+• Never takes a clear position — always hedges with "likely", "probably", "most economists"
+• Perfect logical flow — every sentence connects to the next too cleanly
+• Colon setups: "Here's what's driving the shift:" = AI
+• Too comprehensive — covers every angle, leaves nothing out
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ABSOLUTE RULES — BREAK ANY = AI DETECTION
+ABSOLUTE RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 1. NO SENTENCE OVER 18 WORDS.
-2. NO EM DASHES (—). Never. Replace with a period.
-3. NO COLON SETUPS. Never use "here's the thing:", "here's the twist:", "the real point:", etc.
-4. NO RHETORICAL QUESTIONS. Never write "The old barriers? Yeah..." or "Now?" or "Why?"
-5. NO ONE-WORD DRAMATIC SENTENCES. Never write "Unstoppable." or "Period." or "Remarkable." alone.
-6. NO DRAMATIC CONTRASTS. Never write "Not replacing people. Empowering them." style sentences.
-7. NO DRAMATIC PHRASES: "transformative" → "big", "revolutionizing" → "changing", "outrun" → "beat", "superpowers" → "a big advantage", "unprecedented" → "huge"
-8. NO STRUCTURED ESSAY PARAGRAPHS. Write as one flowing stream of thought.
-9. PLAIN CASUAL WORDS: "lots of" not "numerous", "way faster" not "significantly faster", "can't" not "cannot"
-10. WORD COUNT: output must be ${minWords}–${maxWords} words.
+2. NO EM DASHES (—). Use a period instead.
+3. NO COLON SETUPS. No "here's the thing:", "here's the twist:", "the real point:"
+4. NO RHETORICAL QUESTIONS. No "Why? Because...", "The answer? Simple."
+5. NO ONE-WORD DRAMATIC SENTENCES. No "Unstoppable." "Period." "Remarkable."
+6. NO NUMBERED OR BULLETED LISTS. Never "First... Second... Third..."
+7. NO HEDGING. Don't say "likely", "probably", "most experts think". Take a position.
+8. NO BALANCED BOTH-SIDES. Don't present the counterargument unless Aiden would.
+9. NO STRUCTURED ESSAY PARAGRAPHS. Write as one flowing stream of thought.
+10. PLAIN CASUAL WORDS: "lots of" not "numerous", "way faster" not "significantly faster"
+11. WORD COUNT: ${minWords}–${maxWords} words.
 
 ${extraGuidance}
 ${userStyleBlock}
 
-OUTPUT: Return ONLY the rewritten text. No intro, no explanation.`;
+OUTPUT: Return ONLY the rewritten text.`;
 
   const raw = await mistral(apiKey, system,
-    `Rewrite this text:\n\n${inputText}`,
+    `Rewrite this text in Aiden's voice:\n\n${inputText}`,
     temps[strength || 'aggressive'], 3000);
 
-  const scrubbed = hardScrub(raw);
-  return await enforceWordCount(apiKey, scrubbed, wordTarget);
+  return await enforceWordCount(apiKey, hardScrub(raw), wordTarget);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -388,14 +428,12 @@ async function round1_fixProblems(apiKey, text, originalWordCount) {
       'revolutionizing':'changing','revolutionize':'change',
       'remarkable accuracy':'really good accuracy','fast-paced markets':'fast markets',
       'innovative tools':'new tools','innovative approach':'new approach',
-      'large corporations with extensive teams':'big companies with lots of employees',
       'democratizes':'opens up for everyone','democratize':'open up for everyone',
       'drives innovation':'helps people build new things',
-      'harness this synergy':'use these tools together',
       'the future belongs to':'whoever does this will win',
       'unlocks potential':'helps people do more','silver bullet':'magic fix',
       'leave them in the dust':'beat them','unprecedented scale':'a huge scale',
-      'eerie precision':'really good accuracy','levels the playing field':'lets anyone compete',
+      'levels the playing field':'lets anyone compete',
       'game changer':'a big deal','game-changer':'a big deal',
       'redefining':'changing','cutting-edge':'new','state-of-the-art':'the best',
       'superpowers':'a big advantage','outrun the big':'beat the big',
@@ -404,11 +442,11 @@ async function round1_fixProblems(apiKey, text, originalWordCount) {
   }
 
   if (problems.banned.length > 0) {
-    fixList.push(`BANNED WORDS — replace with plain casual words:\n${problems.banned.slice(0, 6).map(w => `  • "${w}"`).join('\n')}`);
+    fixList.push(`BANNED WORDS:\n${problems.banned.slice(0, 6).map(w => `  • "${w}"`).join('\n')}`);
   }
 
   if (problems.aiOpeners.length > 0) {
-    fixList.push(`AI OPENERS — rewrite these sentence starts:\n${problems.aiOpeners.slice(0, 4).map(s => `  • "${s.trim().slice(0, 80)}"`).join('\n')}`);
+    fixList.push(`AI OPENERS — rewrite these:\n${problems.aiOpeners.slice(0, 4).map(s => `  • "${s.trim().slice(0, 80)}"`).join('\n')}`);
   }
 
   if (fixList.length === 0) return { text, skipped: true };
@@ -419,8 +457,7 @@ WORD COUNT: Must stay ${minWords}–${maxWords} words (currently ${wc(text)}).
 ━━ FIX THESE ━━\n${fixList.join('\n\n')}\nOutput ONLY the corrected text.`,
     text, 0.55, 3000);
 
-  const scrubbed = hardScrub(raw);
-  return { text: await enforceWordCount(apiKey, scrubbed, originalWordCount), skipped: false };
+  return { text: await enforceWordCount(apiKey, hardScrub(raw), originalWordCount), skipped: false };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -429,6 +466,7 @@ WORD COUNT: Must stay ${minWords}–${maxWords} words (currently ${wc(text)}).
 async function round2_breakStructure(apiKey, text, originalWordCount) {
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
+  const { positiveBlock } = buildExampleBlocks(2, 0);
 
   const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 0);
   const paraOpenings = paragraphs.map((p, i) => {
@@ -437,22 +475,24 @@ async function round2_breakStructure(apiKey, text, originalWordCount) {
   }).join('\n');
 
   const raw = await mistral(apiKey,
-    `The text below is still being detected as AI by GPTZero. The main problem is it reads like an organized essay.
+    `This text is still being detected as AI. The problem is it reads like an organized essay.
 
-REFERENCE — this is what passing (86% human) looks like. One flowing stream, not sections:
-"${HUMAN_EXAMPLE_86}"
+REFERENCE — Aiden's real writing that passes GPTZero:
+${positiveBlock}
+
+Notice: Aiden's writing flows as one stream of thought. He doesn't write in organized sections. His reasoning is sometimes a little loose — not every sentence perfectly connects.
 
 RULES FOR THIS PASS:
-• Do NOT use "here's the thing:", "here's the twist:", or any colon setups
 • Do NOT use em dashes (—)
-• Do NOT write rhetorical questions like "The barriers? Gone."
-• Do NOT write one-word dramatic sentences like "Unstoppable."
+• Do NOT use colon setups
+• Do NOT write rhetorical questions
+• Do NOT use numbered lists
 
 YOUR JOB:
 1. Merge 2–3 paragraphs together so it flows as one stream of thought
 2. Rewrite formal topic sentence openers to be more casual
 3. Add connecting words: "also", "and", "but", "so", "now", "plus", "and also"
-4. Keep all the same information
+4. Let some sentences be slightly loose — not perfectly connecting to the next one
 5. Word count must stay ${minWords}–${maxWords} words (currently ${wc(text)})
 
 Current paragraph openers:
@@ -461,8 +501,7 @@ ${paraOpenings}
 Output ONLY the result.`,
     text, 0.65, 3000);
 
-  const scrubbed = hardScrub(raw);
-  return await enforceWordCount(apiKey, scrubbed, originalWordCount);
+  return await enforceWordCount(apiKey, hardScrub(raw), originalWordCount);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -472,34 +511,29 @@ async function round3_addBurstiness(apiKey, text, originalWordCount) {
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
   const burst = calcBurstiness(text);
+  const aiExamplesBlock = AI_COUNTER_EXAMPLES.slice(0, 2)
+    .map(e => `[AVOID — ${e.label}]\n"${e.sample}"`)
+    .join('\n\n');
 
   const raw = await mistral(apiKey,
-    `Final polish. This text needs to sound more like a real person talking.
+    `Final polish. This text needs to sound more like a real person talking and less like AI.
 
-REFERENCE — these examples passed GPTZero:
-"${HUMAN_EXAMPLE_86}"
-
-RULES FOR THIS PASS:
-• Do NOT use "here's the thing:", "here's the twist:", colons as setups
-• Do NOT use em dashes (—)
-• Do NOT write rhetorical questions
-• Do NOT write one-word dramatic sentences
-• Do NOT write dramatic contrasts like "Not replacing people. Empowering them."
+WHAT AI SOUNDS LIKE — DO NOT WRITE LIKE THIS:
+${aiExamplesBlock}
 
 YOUR JOB:
-1. Add 2–3 SHORT plain sentences (4–7 words) to break rhythm.
-   Good examples: "That changes everything." / "No one could do this before." / "Anyone can do this now." / "That is the whole point." / "It just makes sense."
-   BAD examples (too dramatic): "Unstoppable." / "Game over." / "Period."
-2. Find 2–3 smooth polished sentences and make them slightly more casual
-3. Replace formal words: "however" → "but", "obtain" → "get", "currently" → "now", "significant" → "big"
+1. Add 2–3 SHORT plain sentences (4–7 words) to break up the rhythm.
+   Good: "That changes everything." / "No one could do this before." / "Anyone can do this now." / "That is the whole point." / "It just makes sense." / "That is a big deal."
+   Bad (still AI): "Unstoppable." / "Period." / "Game over." — too dramatic
+2. Find 2–3 sentences that sound too smooth or polished — make them slightly more casual
+3. Replace formal words: "however" → "but", "obtain" → "get", "currently" → "now", "significant" → "big", "individuals" → "people"
 4. Word count must stay ${minWords}–${maxWords} words (currently ${wc(text)})
    Current burstiness: ${burst} (target: above 0.45)
 
 Output ONLY the result.`,
     text, 0.70, 3000);
 
-  const scrubbed = hardScrub(raw);
-  return await enforceWordCount(apiKey, scrubbed, originalWordCount);
+  return await enforceWordCount(apiKey, hardScrub(raw), originalWordCount);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -540,8 +574,8 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
     log('2/7', `Analysis defaulting to: ${analysis.type}`);
   }
 
-  // Step 3: Initial rewrite + hard scrub
-  log('3/7', `Rewriting in human voice (${analysis.type} mode)...`);
+  // Step 3: Initial rewrite
+  log('3/7', `Rewriting in Aiden's voice (${analysis.type} mode)...`);
   let result;
   try {
     result = await initialRewrite(apiKey, inputText, analysis.type, strength || 'aggressive', styleProfile);
@@ -592,7 +626,7 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
     log('6/7', `Round 3 failed (${e.message}) — continuing`);
   }
 
-  // Final hard scrub before output
+  // Final hard scrub
   result = hardScrub(result);
 
   // Step 7: Word count fix
@@ -656,35 +690,45 @@ export async function answerAsAiden(apiKey, question, styleProfile, onProgress) 
   if (!apiKey) throw new Error('No API key provided');
   if (!question?.trim()) throw new Error('No question provided');
 
+  // Step 1/3: Write initial draft
   log('1/3', 'Finding closest human example...');
   const closest = findClosestAidenExample(question);
-  log('1/3', `Using "${closest.question}" as template`);
+  log('1/3', `Using "${closest.question}" as template — writing draft...`);
 
   const humanSentences = getSentences(closest.answer);
   const allAidenText = AIDEN_EXAMPLES.map((e, i) => `[HUMAN ${i + 1} — Q: "${e.question}"]\n"${e.answer}"`).join('\n\n');
+  const aiExamplesBlock = AI_COUNTER_EXAMPLES.slice(0, 3).map(e => `[AVOID — ${e.label}]\n"${e.sample}"`).join('\n\n');
   const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
   const sentenceBreakdown = humanSentences.map((s, i) => `  S${i + 1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n');
 
-  log('1/3', 'Writing answer...');
-  const draft = await mistral(apiKey,
-    `Answer a question in the exact voice and structure of these real human examples.
+  const draftRaw = await mistral(apiKey,
+    `Answer a question in Aiden's exact voice. Study all his real answers carefully.
 
+AIDEN'S REAL ANSWERS — WRITE EXACTLY LIKE THESE:
 ${allAidenText}
 
-STRUCTURAL TEMPLATE — match this sentence by sentence:
+AI WRITING TO AVOID — DO NOT WRITE LIKE THIS:
+${aiExamplesBlock}
+
+STRUCTURAL TEMPLATE — match this sentence-by-sentence pattern:
 ${sentenceBreakdown}
+
+KEY TRAITS OF AIDEN'S VOICE:
+• Takes a strong clear position immediately — no hedging
+• Short direct sentences
+• Personal references: "I think", "When I...", "We"
+• Slightly loose reasoning — not every sentence perfectly connects (this is normal and human)
+• Casual words: "lots of", "way behind", "anyone and everyone", "a lot of"
+• Repeats his main point at the end
 
 RULES:
 • Every sentence under 18 words
-• No em dashes (—) ever
-• No colon setups like "here's the thing:"
-• No rhetorical questions like "Why? Because..."
-• No one-word dramatic sentences like "Unstoppable."
-• No dramatic contrasts like "Not replacing people. Empowering them."
-• Plain casual words: "lots of", "way more", "can't", "used to", "tons of"
-• Use "I" and "we" naturally
-• State your position at the start, repeat at the end
-• Write as one flowing stream, not organized essay paragraphs
+• No em dashes (—) — use a period instead
+• No colon setups: "here's the thing:", "here's the twist:"
+• No rhetorical questions
+• No one-word dramatic sentences
+• No numbered lists
+• No hedging — take a position
 
 ${userStyleBlock}
 
@@ -692,38 +736,93 @@ OUTPUT: Return ONLY the answer.`,
     `Question: "${question}"\n\nWrite the answer matching the sentence-by-sentence structure of the template.`,
     0.88, 800);
 
-  const scrubbed = hardScrub(draft);
+  let result = hardScrub(draftRaw);
+  log('1/3', `Draft done: ${wc(result)} words | burst=${calcBurstiness(result)}`);
 
-  log('2/3', 'Checking for remaining AI patterns...');
-  const draftSentences = getSentences(scrubbed);
-  const finalRaw = await mistral(apiKey,
-    `Compare this draft to the human answer and fix anything that diverged.
+  // Step 2/3: Fix AI patterns and improve flow
+  log('2/3', 'Fixing AI patterns and improving flow...');
+  try {
+    const targetWC = wc(result);
+    const minWords = Math.floor(targetWC * 0.90);
+    const maxWords = Math.ceil(targetWC * 1.10);
 
-HUMAN ANSWER:
-${humanSentences.map((s, i) => `H${i + 1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n')}
+    const fixedRaw = await mistral(apiKey,
+      `This answer may still be detected as AI. Fix it to sound more like Aiden.
 
-DRAFT:
-${draftSentences.map((s, i) => `D${i + 1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n')}
+AIDEN'S REAL WRITING (copy this voice):
+${AIDEN_EXAMPLES.slice(0, 3).map((e, i) => `[${i + 1}] "${e.answer}"`).join('\n\n')}
 
-Fix:
-1. Any sentence over 18 words — split it
-2. Any em dash — replace with period
-3. Any dramatically longer sentence than its counterpart — shorten
-4. Any journalistic or dramatic phrasing — make plain
+KEY: Aiden's reasoning is sometimes loose. Not every sentence perfectly connects. That's normal and human.
+
+RULES:
+• No em dashes (—)
+• No colon setups
+• No rhetorical questions
+• No one-word sentences
+• No numbered lists
+• No hedging
+
+YOUR JOB:
+1. Bring the draft closer to Aiden's voice
+2. If it has clean organized paragraphs, merge them into one flowing stream
+3. Add casual connecting words: "also", "and", "but", "so", "now", "plus"
+4. Let some sentences be slightly loose
+5. Word count must stay ${minWords}–${maxWords} words (currently ${wc(result)})
 
 Output ONLY the corrected answer.`,
-    scrubbed, 0.4, 800);
+      result, 0.60, 1000);
 
-  const final = hardScrub(finalRaw);
-  log('3/3', 'Done');
+    result = hardScrub(fixedRaw);
+    result = await enforceWordCount(apiKey, result, targetWC);
+    log('2/3', `After fix: ${wc(result)} words | burst=${calcBurstiness(result)}`);
+  } catch (e) {
+    log('2/3', `Fix pass failed (${e.message}) — continuing`);
+  }
+
+  // Step 3/3: Add burstiness
+  log('3/3', 'Adding burstiness and final polish...');
+  try {
+    const targetWC = wc(result);
+    const minWords = Math.floor(targetWC * 0.90);
+    const maxWords = Math.ceil(targetWC * 1.10);
+    const burst = calcBurstiness(result);
+
+    const burstRaw = await mistral(apiKey,
+      `Final polish. Add short punchy sentences to make this sound more like a real person.
+
+RULES:
+• No em dashes (—)
+• No colon setups
+• No rhetorical questions or one-word sentences
+
+YOUR JOB:
+1. Add 1–2 SHORT sentences (4–7 words) to break up the rhythm.
+   Good: "That is the whole point." / "Anyone can do this now." / "It just makes sense." / "That changes everything." / "That is a big deal."
+   Bad: "Unstoppable." / "Period." — too dramatic, still AI
+2. Find 1–2 sentences that sound too polished and make them more casual
+3. Replace formal words: "however" → "but", "obtain" → "get", "currently" → "now"
+4. Word count must stay ${minWords}–${maxWords} words (currently ${wc(result)})
+   Current burstiness: ${burst} (target: above 0.4)
+
+Output ONLY the result.`,
+      result, 0.70, 800);
+
+    result = hardScrub(burstRaw);
+    result = await enforceWordCount(apiKey, result, targetWC);
+    log('3/3', `Final: ${wc(result)} words | burst=${calcBurstiness(result)}`);
+  } catch (e) {
+    log('3/3', `Burst pass failed — keeping previous`);
+  }
+
+  result = hardScrub(result);
 
   return {
-    text: final,
+    text: result,
     scores: {
-      bannedWordsFound: countBanned(final),
-      aiOpenersFound: countAIOpeners(final).length,
-      burstiness: calcBurstiness(final),
-      wordCount: wc(final)
+      bannedWordsFound: countBanned(result),
+      aiOpenersFound: countAIOpeners(result).length,
+      burstiness: calcBurstiness(result),
+      wordCount: wc(result)
     }
   };
 }
