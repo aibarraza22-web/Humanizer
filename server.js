@@ -14,7 +14,23 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
-app.use(express.static(__dirname));
+
+// Serve static files with no-cache for HTML
+app.use(express.static(__dirname, {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    }
+  }
+}));
+
+// Explicit root — always serves latest index.html
+app.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.sendFile(__dirname + '/index.html');
+});
 
 // ─── Humanize endpoint ────────────────────────────────────────────────────────
 app.post('/humanize', async (req, res) => {
