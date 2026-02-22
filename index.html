@@ -27,6 +27,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:20p
 .key-wrap input::placeholder{color:var(--dim)}
 .key-hint{font-size:0.7rem;color:#555580}
 .key-hint a{color:#6c63ff;text-decoration:none}
+.usage-row{display:flex;align-items:center;gap:10px}
+.usage-badge{font-family:'JetBrains Mono',monospace;font-size:0.68rem;padding:4px 10px;border:1px solid var(--border2);border-radius:20px;color:var(--text2)}
+.btn-upgrade-sm{font-family:'Syne',sans-serif;font-size:0.65rem;font-weight:700;padding:4px 10px;border:1px solid var(--accent);border-radius:20px;background:transparent;color:var(--accent);cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.08em}
+.btn-upgrade-sm:hover{background:var(--glow)}
 
 .app{max-width:1160px;margin:0 auto;padding:24px 28px 80px;display:flex;flex-direction:column;gap:18px}
 
@@ -151,6 +155,26 @@ select:focus{border-color:var(--accent)}
 .tip h3{font-family:'Syne',sans-serif;font-size:0.8rem;font-weight:700;margin-bottom:4px}
 .tip p{font-size:0.77rem;color:#555580;line-height:1.6}
 
+/* upgrade modal */
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:var(--s1);border:1px solid var(--border2);border-radius:var(--r2);padding:28px 32px;max-width:680px;width:90%;max-height:90vh;overflow-y:auto}
+.modal h2{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;margin-bottom:6px}
+.modal .modal-sub{font-size:0.8rem;color:#555580;margin-bottom:18px;line-height:1.5}
+.plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:500px){.plan-grid{grid-template-columns:1fr}}
+.plan-card{padding:16px;border:1px solid var(--border);border-radius:var(--r);background:var(--s2);display:flex;flex-direction:column;gap:6px}
+.plan-card.current{border-color:var(--green)}
+.plan-name{font-family:'Syne',sans-serif;font-size:0.85rem;font-weight:700}
+.plan-price{font-family:'JetBrains Mono',monospace;font-size:1.1rem;font-weight:700;color:var(--accent)}
+.plan-uses{font-size:0.75rem;color:#555580}
+.btn-plan{margin-top:8px;padding:8px 14px;border:1px solid var(--accent);border-radius:var(--r);background:transparent;color:var(--accent);font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;cursor:pointer;transition:all 0.15s}
+.btn-plan:hover{background:var(--glow)}
+.btn-plan.active-plan{border-color:var(--green);color:var(--green);cursor:default}
+.modal-beta{font-size:0.7rem;color:var(--yellow);margin-top:14px;line-height:1.5;padding:8px 12px;background:rgba(241,250,140,0.06);border:1px solid rgba(241,250,140,0.15);border-radius:var(--r)}
+.modal-close{position:absolute;top:12px;right:16px;background:none;border:none;color:#555580;font-size:1.2rem;cursor:pointer}
+.modal-close:hover{color:var(--text)}
+
 ::-webkit-scrollbar{width:5px}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
@@ -162,6 +186,10 @@ select:focus{border-color:var(--accent)}
   <div class="logo">
     <h1>Human<em>izer</em></h1>
     <span class="chip">v12</span>
+  </div>
+  <div class="usage-row">
+    <span class="usage-badge" id="usageBadge">-- uses left</span>
+    <button class="btn-upgrade-sm" onclick="showUpgradeModal()">Upgrade</button>
   </div>
   <div class="key-row">
     <div class="key-wrap">
@@ -175,7 +203,7 @@ select:focus{border-color:var(--accent)}
 <div class="app">
   <div class="tabs">
     <button class="tab active" onclick="switchTab('main',this)">Humanize</button>
-    <button class="tab" onclick="switchTab('answer',this)">Answer as Me</button>
+    <button class="tab" onclick="switchTab('answer',this)">Answer as Human</button>
     <button class="tab" onclick="switchTab('style',this)">Writing Style</button>
     <button class="tab" onclick="switchTab('tips',this)">Tips</button>
   </div>
@@ -183,19 +211,17 @@ select:focus{border-color:var(--accent)}
   <!-- HUMANIZE TAB -->
   <div id="tab-main" class="panel active">
     <div class="steps">
-      <div class="step active" id="step1"><div class="sdot">1</div><span>Examples</span></div>
+      <div class="step active" id="step1"><div class="sdot">1</div><span>Analyze</span></div>
       <div class="sline"></div>
-      <div class="step" id="step2"><div class="sdot">2</div><span>Analyze</span></div>
+      <div class="step" id="step2"><div class="sdot">2</div><span>Rewrite</span></div>
       <div class="sline"></div>
-      <div class="step" id="step3"><div class="sdot">3</div><span>Rewrite</span></div>
+      <div class="step" id="step3"><div class="sdot">3</div><span>Fix #1</span></div>
       <div class="sline"></div>
-      <div class="step" id="step4"><div class="sdot">4</div><span>Fix #1</span></div>
+      <div class="step" id="step4"><div class="sdot">4</div><span>Fix #2</span></div>
       <div class="sline"></div>
-      <div class="step" id="step5"><div class="sdot">5</div><span>Fix #2</span></div>
+      <div class="step" id="step5"><div class="sdot">5</div><span>Fix #3</span></div>
       <div class="sline"></div>
-      <div class="step" id="step6"><div class="sdot">6</div><span>Fix #3</span></div>
-      <div class="sline"></div>
-      <div class="step" id="step7"><div class="sdot">7</div><span>Finalize</span></div>
+      <div class="step" id="step6"><div class="sdot">6</div><span>Finalize</span></div>
     </div>
 
     <div class="egrid">
@@ -214,7 +240,6 @@ select:focus{border-color:var(--accent)}
       <div class="scard"><div class="sc-l">AI words</div><div class="sc-v" id="sWords">—</div></div>
       <div class="scard"><div class="sc-l">AI openers</div><div class="sc-v" id="sOpeners">—</div></div>
       <div class="scard"><div class="sc-l">Fragments</div><div class="sc-v" id="sFrags">—</div></div>
-      <div class="scard"><div class="sc-l">Reddit examples</div><div class="sc-v" id="sExamples">—</div></div>
       <div class="scard"><div class="sc-l">Length</div><div class="sc-v" id="sLen">—</div></div>
     </div>
 
@@ -240,10 +265,10 @@ select:focus{border-color:var(--accent)}
     </div>
   </div>
 
-  <!-- ANSWER AS ME TAB -->
+  <!-- ANSWER AS HUMAN TAB -->
   <div id="tab-answer" class="panel">
     <div style="font-size:0.83rem;color:#555580;line-height:1.65;max-width:620px">
-      Type a question and get an answer written in your voice — trained on your real writing, not an AI's idea of casual. Short, direct, confident. No bullet points, no hedging.
+      Type a question and get an answer written in human voice — direct, personal, confident. Not AI balanced. Not hedged. A real human answer.
     </div>
 
     <div class="field">
@@ -252,7 +277,7 @@ select:focus{border-color:var(--accent)}
     </div>
 
     <div class="controls">
-      <button class="btn-p" id="answerBtn" onclick="answer()">Answer as Me →</button>
+      <button class="btn-p" id="answerBtn" onclick="answer()">Answer as Human →</button>
       <button class="btn-g" onclick="copyOut('answerOutput')">Copy answer</button>
     </div>
 
@@ -327,19 +352,57 @@ select:focus{border-color:var(--accent)}
   <!-- TIPS TAB -->
   <div id="tab-tips" class="panel">
     <div class="tips-grid">
-      <div class="tip"><div class="tip-n">01</div><h3>Trained on real data</h3><p>The pipeline uses a real human vs AI dataset plus 6 real answers as voice examples. It knows what human writing looks like — it's not guessing at "casual".</p></div>
-      <div class="tip"><div class="tip-n">02</div><h3>Iterative fix loop</h3><p>Load examples → Analyze → Rewrite → 3 rounds of targeted fixes. Each fix round finds what's STILL detecting as AI and fixes only those things — long sentences, dramatic phrases, essay structure, uniform rhythm.</p></div>
-      <div class="tip"><div class="tip-n">03</div><h3>Answer as Me</h3><p>Use the Answer tab for discussion posts, short answers, or any question you need to respond to. It answers the way you'd answer — direct, confident, no hedging.</p></div>
-      <div class="tip"><div class="tip-n">04</div><h3>Make a few edits yourself</h3><p>Change 2–3 sentences to exactly how you'd write them. Genuinely human text no AI can replicate. The single biggest improvement you can make.</p></div>
-      <div class="tip"><div class="tip-n">05</div><h3>Works on research papers too</h3><p>Paste sections of a research paper — the pipeline preserves all your citations, evidence, and arguments while rewriting the prose to sound human.</p></div>
+      <div class="tip"><div class="tip-n">01</div><h3>Full human writing, not AI paraphrasing</h3><p>Most humanizers just shuffle AI sentences around. We don't paraphrase AI — we rewrite it from scratch using patterns from real human writing. The output is human writing, not AI writing with synonyms swapped.</p></div>
+      <div class="tip"><div class="tip-n">02</div><h3>Human answers, not AI answers</h3><p>Other tools humanize text you already wrote. We also answer questions from scratch in a real human voice — direct, opinionated, personal. No other tool does this.</p></div>
+      <div class="tip"><div class="tip-n">03</div><h3>Better, cheaper, more reliable</h3><p>We use Mistral's API — faster and cheaper than GPT-4 or Claude. You bring your own key so you pay at cost, not at markup. No subscription gouging for what should be a simple tool.</p></div>
+      <div class="tip"><div class="tip-n">04</div><h3>The iterative fix loop</h3><p>Rewrite → 3 rounds of targeted fixes. Each round detects what's still AI (long sentences, hedging, dramatic phrases, Claude qualifiers) and fixes only those things. Not one pass and done.</p></div>
+      <div class="tip"><div class="tip-n">05</div><h3>Make 2–3 edits yourself</h3><p>Change a couple sentences to exactly how you'd write them. No AI can replicate that. It's the single biggest improvement you can make to any output.</p></div>
       <div class="tip"><div class="tip-n">06</div><h3>Running the server</h3><p>Open terminal in the project folder and run: <code style="background:var(--s3);padding:1px 5px;border-radius:3px;font-size:0.75rem">npm start</code></p></div>
     </div>
+  </div>
+</div>
+
+<!-- UPGRADE MODAL -->
+<div class="modal-overlay" id="upgradeModal">
+  <div class="modal" style="position:relative">
+    <button class="modal-close" onclick="hideUpgradeModal()">&times;</button>
+    <h2>Upgrade Your Plan</h2>
+    <div class="modal-sub">Choose a plan that fits your usage. The AI that gives human answers — full human writing, not AI paraphrasing.</div>
+    <div class="plan-grid">
+      <div class="plan-card" id="plan-free">
+        <div class="plan-name">Free</div>
+        <div class="plan-price">$0</div>
+        <div class="plan-uses">2 uses total</div>
+        <button class="btn-plan" onclick="upgradePlan('free')">Current</button>
+      </div>
+      <div class="plan-card" id="plan-basic">
+        <div class="plan-name">Basic</div>
+        <div class="plan-price">$5/mo</div>
+        <div class="plan-uses">20 uses per month</div>
+        <button class="btn-plan" onclick="upgradePlan('basic')">Upgrade</button>
+      </div>
+      <div class="plan-card" id="plan-pro">
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">$10/mo</div>
+        <div class="plan-uses">50 uses per month</div>
+        <button class="btn-plan" onclick="upgradePlan('pro')">Upgrade</button>
+      </div>
+      <div class="plan-card" id="plan-unlimited">
+        <div class="plan-name">Unlimited</div>
+        <div class="plan-price">$20/mo</div>
+        <div class="plan-uses">Unlimited uses</div>
+        <button class="btn-plan" onclick="upgradePlan('unlimited')">Upgrade</button>
+      </div>
+    </div>
+    <div class="modal-beta">Payment integration coming soon — upgrading now is free during beta.</div>
   </div>
 </div>
 
 <script>
 'use strict';
 let styleProfile = null;
+let sessionToken = localStorage.getItem('humanizer_token') || null;
+let currentPlan = 'free';
 
 const wc = t => t.trim() ? t.trim().split(/\s+/).length : 0;
 
@@ -347,6 +410,85 @@ document.getElementById('inputText').addEventListener('input', () => {
   document.getElementById('inWC').textContent = wc(document.getElementById('inputText').value) + ' words';
 });
 
+// ─── Session Management ──────────────────────────────────────────────────────
+async function initSession() {
+  try {
+    const headers = {};
+    if (sessionToken) headers['X-Session-Token'] = sessionToken;
+    const res = await fetch('/session', { headers });
+    const data = await res.json();
+    sessionToken = data.token;
+    currentPlan = data.plan;
+    localStorage.setItem('humanizer_token', sessionToken);
+    updateUsageBadge(data.usesLeft, data.plan);
+  } catch (e) {
+    console.log('Session init failed:', e);
+  }
+}
+
+function updateUsageBadge(usesLeft, plan) {
+  const badge = document.getElementById('usageBadge');
+  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+  if (usesLeft === -1) {
+    badge.textContent = `Unlimited (${planLabel})`;
+  } else {
+    const planMax = { free: 2, basic: 20, pro: 50 }[plan] || '?';
+    badge.textContent = `${usesLeft} uses left (${planLabel})`;
+  }
+  currentPlan = plan;
+  updatePlanCards(plan);
+}
+
+function updatePlanCards(activePlan) {
+  ['free','basic','pro','unlimited'].forEach(p => {
+    const card = document.getElementById('plan-' + p);
+    const btn = card?.querySelector('.btn-plan');
+    if (!card || !btn) return;
+    if (p === activePlan) {
+      card.classList.add('current');
+      btn.textContent = 'Current';
+      btn.classList.add('active-plan');
+    } else {
+      card.classList.remove('current');
+      btn.textContent = 'Upgrade';
+      btn.classList.remove('active-plan');
+    }
+  });
+}
+
+function showUpgradeModal() {
+  document.getElementById('upgradeModal').classList.add('show');
+}
+function hideUpgradeModal() {
+  document.getElementById('upgradeModal').classList.remove('show');
+}
+
+async function upgradePlan(plan) {
+  if (plan === currentPlan) return;
+  try {
+    const res = await fetch('/upgrade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: sessionToken, plan })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    updateUsageBadge(data.usesLeft, data.plan);
+    hideUpgradeModal();
+  } catch (e) {
+    alert('Upgrade failed: ' + e.message);
+  }
+}
+
+// Close modal on overlay click
+document.getElementById('upgradeModal').addEventListener('click', function(e) {
+  if (e.target === this) hideUpgradeModal();
+});
+
+// Init session on load
+initSession();
+
+// ─── Tab / Method switching ──────────────────────────────────────────────────
 function switchTab(name, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
@@ -364,7 +506,7 @@ function setStatus(id, msg, type='') {
   document.getElementById(id).className = 'status ' + type;
 }
 function setStep(n) {
-  for (let i = 1; i <= 7; i++) {
+  for (let i = 1; i <= 6; i++) {
     const el = document.getElementById('step' + i);
     if (!el) continue;
     el.classList.remove('active','done');
@@ -372,8 +514,8 @@ function setStep(n) {
     else if (i === n) el.classList.add('active');
   }
 }
-const stepForMsg = msg => { const m = msg.match(/^(\d)\/7/); return m ? parseInt(m[1]) : null; };
-const progForStep = n => [0, 8, 18, 35, 50, 65, 80, 92][n] || 0;
+const stepForMsg = msg => { const m = msg.match(/^(\d)\/6/); return m ? parseInt(m[1]) : null; };
+const progForStep = n => [0, 12, 28, 45, 62, 78, 95][n] || 0;
 
 function addLog(panelId, msg, state='active') {
   const panel = document.getElementById(panelId);
@@ -418,11 +560,22 @@ async function run() {
   setStatus('statusEl', 'Running pipeline...', 'working');
 
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (sessionToken) headers['X-Session-Token'] = sessionToken;
+
     const response = await fetch('/humanize', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ apiKey, text: inputText, strength, styleProfile })
     });
+
+    if (response.status === 402) {
+      hideProg('prog'); setStep(1);
+      setStatus('statusEl', 'Out of uses — upgrade your plan.', 'err');
+      showUpgradeModal();
+      btn.disabled = false;
+      return;
+    }
     if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Server error'); }
 
     const reader = response.body.getReader();
@@ -457,16 +610,21 @@ async function run() {
           sc('sWords', s.bannedWordsFound.length === 0 ? '✓ clean' : s.bannedWordsFound.length + ' found', s.bannedWordsFound.length === 0 ? 'g' : s.bannedWordsFound.length <= 1 ? 'm' : 'b');
           sc('sOpeners', s.aiOpenersFound === 0 ? '✓ none' : s.aiOpenersFound + ' found', s.aiOpenersFound === 0 ? 'g' : s.aiOpenersFound <= 1 ? 'm' : 'b');
           sc('sFrags', s.fragments >= 3 ? '✓ ' + s.fragments : s.fragments >= 1 ? '~ ' + s.fragments : '✗ 0', s.fragments >= 3 ? 'g' : s.fragments >= 1 ? 'm' : 'b');
-          sc('sExamples', s.examplesUsed > 0 ? '✓ ' + s.examplesUsed : '✗ none', s.examplesUsed > 0 ? 'g' : 'b');
           sc('sLen', diff < 0.06 ? '✓ matched' : diff < 0.14 ? '~ close' : '✗ off', diff < 0.06 ? 'g' : diff < 0.14 ? 'm' : 'b');
 
           document.getElementById('scoreRow').style.display = 'flex';
           if (s.humanExampleSources?.length) {
             document.getElementById('exContent').innerHTML =
               `<div class="ex-item"><span class="ex-tag">sources</span>${s.humanExampleSources.join(', ')}</div>
-               <div class="ex-item"><span class="ex-tag">count</span>${s.examplesUsed} human sentences from dataset</div>`;
+               <div class="ex-item"><span class="ex-tag">count</span>${s.examplesUsed} human examples in dataset</div>`;
             document.getElementById('exPanel').className = 'ex-panel show';
           }
+
+          // Update usage badge if server sent usesLeft
+          if (event.usesLeft !== undefined) {
+            updateUsageBadge(event.usesLeft, currentPlan);
+          }
+
           setStep(7); hideProg('prog');
           setStatus('statusEl', 'Done — make 1–2 of your own edits for best results.', 'ok');
           addLog('logPanel', 'Complete ✓', 'done');
@@ -484,7 +642,7 @@ async function run() {
   btn.disabled = false;
 }
 
-// ─── ANSWER AS ME ─────────────────────────────────────────────────────────────
+// ─── ANSWER AS HUMAN ──────────────────────────────────────────────────────────
 async function answer() {
   const apiKey = document.getElementById('apiKey').value.trim();
   const question = document.getElementById('questionInput').value.trim();
@@ -506,11 +664,24 @@ async function answer() {
   setStatus('answerStatus', 'Writing your answer...', 'working');
 
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (sessionToken) headers['X-Session-Token'] = sessionToken;
+
     const response = await fetch('/answer', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ apiKey, question, styleProfile })
     });
+
+    if (response.status === 402) {
+      hideProg('answerProg');
+      setStatus('answerStatus', 'Out of uses — upgrade your plan.', 'err');
+      outEl.textContent = '';
+      outEl.classList.remove('answer-placeholder');
+      showUpgradeModal();
+      btn.disabled = false;
+      return;
+    }
     if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Server error'); }
 
     const reader = response.body.getReader();
@@ -542,6 +713,11 @@ async function answer() {
           sc('aBurst', s.burstiness >= 0.4 ? '✓ ' + s.burstiness : '~ ' + s.burstiness, s.burstiness >= 0.4 ? 'g' : 'm');
           sc('aWC', s.wordCount + ' words', 'g');
           document.getElementById('answerScoreRow').style.display = 'flex';
+
+          if (event.usesLeft !== undefined) {
+            updateUsageBadge(event.usesLeft, currentPlan);
+          }
+
           hideProg('answerProg');
           setStatus('answerStatus', 'Done.', 'ok');
           addLog('answerLog', 'Complete ✓', 'done');
