@@ -1,9 +1,9 @@
 {
   "name": "humanizer-v8",
   "version": "8.0.0",
-  "description": "AI humanizer — real Reddit scraping + multi-pass Mistral pipeline",
+  "description": "AI humanizer — multi-pass Mistral pipeline",
   "type": "module",
-  "_deploy": "2026-02-22-v10",
+  "_deploy": "2026-02-22-v11",
   "scripts": {
     "start": "node server.js",
     "build": "node --version"
