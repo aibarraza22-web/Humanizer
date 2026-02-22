@@ -102,6 +102,21 @@ function detectInputType(text) {
   return analysis > opinion + 2 ? 'analysis' : 'opinion';
 }
 
+// Detect whether a question needs a simple short answer or a full essay-length response
+function detectQuestionComplexity(question) {
+  const q = question.trim();
+  const words = q.split(/\s+/).length;
+  // Math operations: "What is 2+2?", "5 * 3?"
+  if (/\d\s*[\+\-\*\/\^x×÷]\s*\d/.test(q)) return 'simple';
+  // Simple factual: "What is X?" where X is short
+  if (words <= 8 && /^(what|who|define|how much|how many)\s+(is|are|was|were|does)\b/i.test(q)) return 'simple';
+  // Conversion / definition style: very short questions
+  if (words <= 6) return 'simple';
+  // Medium-length questions
+  if (words < 15) return 'medium';
+  return 'complex';
+}
+
 function detectProblems(text) {
   const sentences = getSentences(text);
   const longSentences = sentences.filter(s => s.split(/\s+/).length > 17);
@@ -557,20 +572,35 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
 // ═══════════════════════════════════════════════════════════════════
 function findClosestAidenExample(question) {
   const q = question.toLowerCase();
-  const qWords = q.split(/\s+/).filter(w => w.length > 3);
+  const qWords = q.split(/\s+/).filter(w => w.length > 2);
+  const hasNumbers = /\d/.test(q);
+  const hasMath = /[\+\-\*\/\^x×÷]/.test(q) || /factor|solve|calculate|equation|equal/i.test(q);
+
   const scored = AIDEN_EXAMPLES.map((ex, i) => {
-    const exWords = ex.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    return {
-      i,
-      score: qWords.filter(w => exWords.includes(w)).length * 2 +
-        qWords.filter(w => exWords.some(ew => ew.includes(w) || w.includes(ew))).length
-    };
+    const exQ = ex.question.toLowerCase();
+    const exWords = exQ.split(/\s+/).filter(w => w.length > 2);
+    const exHasNumbers = /\d/.test(exQ);
+    const exHasMath = /[\+\-\*\/\^x×÷]/.test(exQ) || /factor|solve|calculate|equation|equal/i.test(exQ);
+
+    let score = qWords.filter(w => exWords.includes(w)).length * 2 +
+      qWords.filter(w => exWords.some(ew => ew.includes(w) || w.includes(ew))).length;
+
+    // Bonus: both have numbers
+    if (hasNumbers && exHasNumbers) score += 3;
+    // Bonus: both are math
+    if (hasMath && exHasMath) score += 5;
+    // Bonus: similar question length (within 5 words)
+    const lenDiff = Math.abs(q.split(/\s+/).length - exQ.split(/\s+/).length);
+    if (lenDiff <= 3) score += 2;
+    if (lenDiff <= 1) score += 2;
+
+    return { i, score };
   });
   scored.sort((a, b) => b.score - a.score);
   return AIDEN_EXAMPLES[scored[0].i];
 }
 
-export async function answerAsAiden(apiKey, question, styleProfile, onProgress) {
+export async function answerAsAiden(apiKey, question, styleProfile, onProgress, chatHistory = []) {
   const log = (step, msg) => {
     console.log(`  [${step}] ${msg}`);
     if (onProgress) onProgress({ step, msg });
@@ -579,9 +609,61 @@ export async function answerAsAiden(apiKey, question, styleProfile, onProgress) 
   if (!apiKey) throw new Error('No API key provided');
   if (!question?.trim()) throw new Error('No question provided');
 
-  // Step 1/3: Write initial draft
-  log('1/3', 'Finding closest human example...');
+  const complexity = detectQuestionComplexity(question);
   const closest = findClosestAidenExample(question);
+  const closestAnswerWords = wc(closest.answer);
+
+  // Build chat context if there's history
+  let chatContext = '';
+  if (chatHistory.length > 0) {
+    chatContext = '\nPREVIOUS CONVERSATION (maintain context, don\'t repeat yourself):\n' +
+      chatHistory.slice(-10).map(m => `${m.role === 'user' ? 'Q' : 'A'}: ${m.content}`).join('\n') + '\n';
+  }
+
+  // ─── SIMPLE QUESTIONS: one-shot, no multi-round inflation ───
+  if (complexity === 'simple' || closestAnswerWords < 25) {
+    log('1/3', `Simple question detected — writing short answer...`);
+
+    // Pick a few short Aiden examples to show the model
+    const shortExamples = AIDEN_EXAMPLES
+      .filter(e => wc(e.answer) < 50)
+      .map((e, i) => `Q: "${e.question}"\nA: "${e.answer}"`)
+      .join('\n\n');
+
+    const draftRaw = await mistral(apiKey,
+      `Answer this question the way a real human would. Be direct and brief.
+
+SHORT ANSWER EXAMPLES — match this length:
+${shortExamples || `Q: "What is 1 + 1 equal?"\nA: "One plus one equals two."`}
+
+RULES:
+• Answer in 1-3 sentences MAX. If the answer is one sentence, just write one sentence.
+• Do NOT pad with extra explanation, context, or filler.
+• Do NOT write a paragraph when a sentence will do.
+• Sound natural and casual, like a person answering quickly.
+• No em dashes, no colon setups, no hedging.
+${chatContext}
+OUTPUT: Return ONLY the answer. Nothing else.`,
+      `Question: "${question}"`,
+      0.7, 200);
+
+    let result = hardScrub(draftRaw);
+    log('2/3', `Draft done: ${wc(result)} words`);
+    log('3/3', `Simple answer — skipping fix rounds`);
+
+    return {
+      text: result,
+      scores: {
+        bannedWordsFound: countBanned(result),
+        aiOpenersFound: countAIOpeners(result).length,
+        burstiness: calcBurstiness(result),
+        wordCount: wc(result)
+      }
+    };
+  }
+
+  // ─── FULL QUESTIONS: multi-round process ───
+  log('1/3', 'Finding closest human example...');
   log('1/3', `Using "${closest.question}" as template — writing draft...`);
 
   const humanSentences = getSentences(closest.answer);
@@ -589,6 +671,11 @@ export async function answerAsAiden(apiKey, question, styleProfile, onProgress) 
   const aiExamplesBlock = AI_COUNTER_EXAMPLES.slice(0, 3).map(e => `[AVOID — ${e.label}]\n"${e.sample}"`).join('\n\n');
   const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
   const sentenceBreakdown = humanSentences.map((s, i) => `  S${i + 1} [${s.split(/\s+/).length}w]: "${s}"`).join('\n');
+
+  // For medium questions, target shorter answers
+  const lengthGuidance = complexity === 'medium'
+    ? `\nLENGTH: Keep this answer SHORT — 40-80 words max. Don't over-explain. Answer the question and stop.`
+    : `\nLENGTH: Aiden's answers are usually 80-150 words. Match that range.`;
 
   const draftRaw = await mistral(apiKey,
     `Answer a question in Aiden's exact voice. Study all his real answers carefully.
@@ -610,10 +697,13 @@ KEY TRAITS OF AIDEN'S VOICE:
 • SPECIFIC DETAILS — if he has a personal example, he uses it
 • DOES NOT present the other side unless he's dismissing it
 • DOES NOT use "however", "that said", "on the other hand", "it's worth noting"
-• SHORT AND DIRECT — Aiden's answers are often 80-150 words. Don't over-explain.
+• SHORT AND DIRECT — Don't over-explain.
 • Personal references: "I think", "When I...", "We"
 • Slightly loose reasoning — not every sentence perfectly connects (this is normal and human)
 • Casual words: "lots of", "way behind", "anyone and everyone", "a lot of"
+${lengthGuidance}
+
+CRITICAL: Match the LENGTH of your answer to the COMPLEXITY of the question. Simple questions get short answers. Don't write a paragraph when 2 sentences will do.
 
 RULES:
 • Every sentence under 18 words
@@ -623,7 +713,7 @@ RULES:
 • No one-word dramatic sentences
 • No numbered lists
 • No hedging — take a position
-
+${chatContext}
 ${userStyleBlock}
 
 OUTPUT: Return ONLY the answer.`,
@@ -662,6 +752,7 @@ YOUR JOB:
 3. Add casual connecting words: "also", "and", "but", "so", "now", "plus"
 4. Let some sentences be slightly loose
 5. Word count must stay ${minWords}–${maxWords} words (currently ${wc(result)})
+6. Do NOT make the answer longer than it needs to be
 
 Output ONLY the corrected answer.`,
       result, 0.60, 1000);

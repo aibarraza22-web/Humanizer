@@ -41,7 +41,7 @@ const PLANS = {
 function getOrCreateSession(token) {
   if (token && sessions.has(token)) return sessions.get(token);
   const newToken = crypto.randomUUID();
-  const session = { token: newToken, plan: 'free', usesLeft: 2, totalUses: 0 };
+  const session = { token: newToken, plan: 'free', usesLeft: 2, totalUses: 0, chats: new Map() };
   sessions.set(newToken, session);
   return session;
 }
@@ -98,6 +98,57 @@ app.post('/upgrade', (req, res) => {
   });
 });
 
+// ─── Chat System ─────────────────────────────────────────────────────────────
+
+// GET /chats — list all chats for this session
+app.get('/chats', (req, res) => {
+  const token = req.headers['x-session-token'];
+  const session = getOrCreateSession(token);
+  const chatList = Array.from(session.chats.values()).map(c => ({
+    id: c.id,
+    title: c.title,
+    messageCount: c.messages.length,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt
+  }));
+  chatList.sort((a, b) => b.updatedAt - a.updatedAt);
+  res.json({ chats: chatList });
+});
+
+// POST /chats — create a new chat
+app.post('/chats', (req, res) => {
+  const token = req.headers['x-session-token'];
+  const session = getOrCreateSession(token);
+  const chatId = crypto.randomUUID();
+  const chat = {
+    id: chatId,
+    title: 'New Chat',
+    messages: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  session.chats.set(chatId, chat);
+  res.json({ id: chat.id, title: chat.title, messages: [], createdAt: chat.createdAt });
+});
+
+// GET /chats/:id — get full chat with messages
+app.get('/chats/:id', (req, res) => {
+  const token = req.headers['x-session-token'];
+  const session = getOrCreateSession(token);
+  const chat = session.chats.get(req.params.id);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  res.json(chat);
+});
+
+// DELETE /chats/:id — delete a chat
+app.delete('/chats/:id', (req, res) => {
+  const token = req.headers['x-session-token'];
+  const session = getOrCreateSession(token);
+  if (!session.chats.has(req.params.id)) return res.status(404).json({ error: 'Chat not found' });
+  session.chats.delete(req.params.id);
+  res.json({ ok: true });
+});
+
 // ─── /humanize ────────────────────────────────────────────────────────────────
 app.post('/humanize', async (req, res) => {
   // Check usage
@@ -133,9 +184,33 @@ app.post('/answer', async (req, res) => {
   const session = checkUsage(req, res);
   if (!session) return;
 
-  const { apiKey, question, styleProfile } = req.body;
+  const { apiKey, question, styleProfile, chatId } = req.body;
   if (!apiKey) return res.status(400).json({ error: 'Missing API key' });
   if (!question) return res.status(400).json({ error: 'Missing question' });
+
+  // Get or create chat
+  let chat;
+  if (chatId && session.chats.has(chatId)) {
+    chat = session.chats.get(chatId);
+  } else {
+    // Create a new chat automatically
+    const newId = crypto.randomUUID();
+    chat = {
+      id: newId,
+      title: question.slice(0, 60) + (question.length > 60 ? '...' : ''),
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    session.chats.set(newId, chat);
+  }
+
+  // Build chat history for context
+  const chatHistory = chat.messages.map(m => ({ role: m.role, content: m.content }));
+
+  // Add the user's question to the chat
+  chat.messages.push({ role: 'user', content: question, timestamp: Date.now() });
+  chat.updatedAt = Date.now();
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -147,10 +222,25 @@ app.post('/answer', async (req, res) => {
   try {
     const result = await answerAsAiden(
       apiKey, question, styleProfile || null,
-      ({ step, msg }) => send({ type: 'progress', step, msg })
+      ({ step, msg }) => send({ type: 'progress', step, msg }),
+      chatHistory
     );
-    send({ type: 'result', text: result.text, scores: result.scores, usesLeft: session.usesLeft });
+
+    // Store the answer in the chat
+    chat.messages.push({ role: 'assistant', content: result.text, timestamp: Date.now() });
+    chat.updatedAt = Date.now();
+
+    send({
+      type: 'result',
+      text: result.text,
+      scores: result.scores,
+      usesLeft: session.usesLeft,
+      chatId: chat.id,
+      chatTitle: chat.title
+    });
   } catch (err) {
+    // Remove the question if answer failed
+    chat.messages.pop();
     send({ type: 'error', message: err.message });
   }
   res.end();
