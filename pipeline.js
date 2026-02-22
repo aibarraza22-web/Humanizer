@@ -123,7 +123,17 @@ async function rewriteWithExamples(apiKey, inputText, humanExamples, strength, s
     subtle: `You are lightly editing this to sound more natural and less machine-like. Adjust rhythm, break up smooth sentences, add small imperfections. Keep the structure mostly intact.`
   };
 
-  const temps = { aggressive: 0.95, standard: 0.82, subtle: 0.65 };
+ const temps = { aggressive: 1.1, standard: 0.98, subtle: 0.80 };
+```
+
+Groq's LLaMA supports up to 2.0. Higher temperature = less statistically predictable token choices = lower perplexity scores on GPTZero.
+
+Also add this to the `surgicalScrub` system prompt — it's the most direct anti-GPTZero instruction:
+```
+PERPLEXITY HACK: For every 3 sentences, find one word that is completely correct 
+but slightly unexpected — not wrong, just the word a careful human would choose 
+rather than the word a language model would default to. Replace the predictable 
+word with the more interesting one.
 
   const examplesBlock = humanExamples.length > 0
     ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
