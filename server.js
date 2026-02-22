@@ -1,6 +1,7 @@
 // server.js — Humanizer v12
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import { humanize, answerAsAiden } from './pipeline.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -28,8 +29,81 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
 });
 
+// ─── Session & Usage System ──────────────────────────────────────────────────
+const sessions = new Map();
+const PLANS = {
+  free:      { uses: 2,  monthly: false },
+  basic:     { uses: 20, monthly: true },
+  pro:       { uses: 50, monthly: true },
+  unlimited: { uses: -1, monthly: true }
+};
+
+function getOrCreateSession(token) {
+  if (token && sessions.has(token)) return sessions.get(token);
+  const newToken = crypto.randomUUID();
+  const session = { token: newToken, plan: 'free', usesLeft: 2, totalUses: 0 };
+  sessions.set(newToken, session);
+  return session;
+}
+
+function checkUsage(req, res) {
+  const token = req.headers['x-session-token'];
+  const session = getOrCreateSession(token);
+  if (session.usesLeft === 0) {
+    res.status(402).json({ error: 'OUT_OF_USES' });
+    return null;
+  }
+  // Decrement (unless unlimited which is -1)
+  if (session.usesLeft > 0) session.usesLeft--;
+  session.totalUses++;
+  return session;
+}
+
+// GET /session — return or create session
+app.get('/session', (req, res) => {
+  const token = req.headers['x-session-token'];
+  const session = getOrCreateSession(token);
+  res.json({
+    token: session.token,
+    usesLeft: session.usesLeft,
+    plan: session.plan,
+    totalUses: session.totalUses
+  });
+});
+
+// POST /use — decrement uses manually
+app.post('/use', (req, res) => {
+  const token = req.headers['x-session-token'];
+  if (!token || !sessions.has(token)) return res.status(401).json({ error: 'Invalid session' });
+  const session = sessions.get(token);
+  if (session.usesLeft === 0) return res.status(402).json({ error: 'OUT_OF_USES' });
+  if (session.usesLeft > 0) session.usesLeft--;
+  session.totalUses++;
+  res.json({ usesLeft: session.usesLeft, plan: session.plan, totalUses: session.totalUses });
+});
+
+// POST /upgrade — upgrade plan (no real payment yet)
+app.post('/upgrade', (req, res) => {
+  const { token, plan } = req.body;
+  if (!token || !sessions.has(token)) return res.status(401).json({ error: 'Invalid session' });
+  if (!PLANS[plan]) return res.status(400).json({ error: 'Invalid plan' });
+  const session = sessions.get(token);
+  session.plan = plan;
+  session.usesLeft = PLANS[plan].uses;
+  res.json({
+    token: session.token,
+    usesLeft: session.usesLeft,
+    plan: session.plan,
+    totalUses: session.totalUses
+  });
+});
+
 // ─── /humanize ────────────────────────────────────────────────────────────────
 app.post('/humanize', async (req, res) => {
+  // Check usage
+  const session = checkUsage(req, res);
+  if (!session) return;
+
   const { apiKey, text, strength, styleProfile } = req.body;
   if (!apiKey) return res.status(400).json({ error: 'Missing API key' });
   if (!text) return res.status(400).json({ error: 'Missing text' });
@@ -46,7 +120,7 @@ app.post('/humanize', async (req, res) => {
       apiKey, text, strength || 'aggressive', styleProfile || null,
       ({ step, msg }) => send({ type: 'progress', step, msg })
     );
-    send({ type: 'result', text: result.text, scores: result.scores });
+    send({ type: 'result', text: result.text, scores: result.scores, usesLeft: session.usesLeft });
   } catch (err) {
     send({ type: 'error', message: err.message });
   }
@@ -55,6 +129,10 @@ app.post('/humanize', async (req, res) => {
 
 // ─── /answer ──────────────────────────────────────────────────────────────────
 app.post('/answer', async (req, res) => {
+  // Check usage
+  const session = checkUsage(req, res);
+  if (!session) return;
+
   const { apiKey, question, styleProfile } = req.body;
   if (!apiKey) return res.status(400).json({ error: 'Missing API key' });
   if (!question) return res.status(400).json({ error: 'Missing question' });
@@ -71,7 +149,7 @@ app.post('/answer', async (req, res) => {
       apiKey, question, styleProfile || null,
       ({ step, msg }) => send({ type: 'progress', step, msg })
     );
-    send({ type: 'result', text: result.text, scores: result.scores });
+    send({ type: 'result', text: result.text, scores: result.scores, usesLeft: session.usesLeft });
   } catch (err) {
     send({ type: 'error', message: err.message });
   }
