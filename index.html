@@ -617,7 +617,7 @@ function buildImperfectionRules(imperfs, strength) {
 // ════════════════════════════════════════
 //  CALL 2 — REWRITER
 // ════════════════════════════════════════
-async function rewriteText(apiKey, inputText, strength, styleExamples) {
+async function rewriteText(apiKey, inputText, strength, styleExamples, runtime) {
   const wordTarget = wc(inputText);
 
   const personas = {
@@ -657,6 +657,31 @@ async function rewriteText(apiKey, inputText, strength, styleExamples) {
   ▸ Never use any of these words: ${BANNED_WORDS.join(', ')}`;
 
   return await callGroq(apiKey, system, `Rewrite this text:\n\n${inputText}`, temps[strength]);
+}
+
+async function alignToCorpus(apiKey, text, runtime, wordTarget) {
+  const human = runtime.human.slice(0, 10);
+  const ai = runtime.ai.slice(0, 10);
+  const system = `You are a strict style calibrator.
+Goal: Make the candidate text much closer to HUMAN references and far from AI references.
+
+Return ONLY the revised text.
+Rules:
+- Preserve the exact original meaning.
+- Keep within 10% of ${wordTarget} words.
+- Borrow only STYLE signals from HUMAN references (rhythm, sentence openings, directness, imperfections).
+- Explicitly avoid AI reference patterns (predictable transitions, formal topic-sentence cadence, repetitive structure).
+- Make enough edits that the style shift is obvious.`;
+
+  const prompt = `CANDIDATE TEXT:
+${text}
+
+HUMAN REFERENCES:
+${human.map((h, i) => `${i + 1}. ${h}`).join('\n\n')}
+
+AI REFERENCES:
+${ai.map((a, i) => `${i + 1}. ${a}`).join('\n\n')}`;
+  return await callGroq(apiKey, system, prompt, 0.72);
 }
 
 // ════════════════════════════════════════
@@ -756,12 +781,18 @@ async function run() {
       } catch (e) { /* continue */ }
     }
 
-    const rewritten = await rewriteText(apiKey, inputText, strength, styleExamples);
-    setProg(55);
+    const runtime = await getRuntimeCorpus(apiKey, inputText);
+    setStatus('Pass 1 — Rewriting against topic-matched human/AI corpus...', 'working');
+    const rewritten = await rewriteText(apiKey, inputText, strength, styleExamples, runtime);
+    setProg(50);
 
     setStep(2);
-    setStatus('Pass 2 — Surgical scrub: fragments + perplexity + burstiness...', 'working');
-    const final = await scrubText(apiKey, rewritten);
+    setStatus('Pass 2 — Aligning draft closer to HUMAN corpus and away from AI corpus...', 'working');
+    const aligned = await alignToCorpus(apiKey, rewritten, runtime, wc(inputText));
+    setProg(78);
+
+    setStatus('Pass 2b — Surgical scrub: fragments + perplexity + burstiness...', 'working');
+    const final = await scrubText(apiKey, aligned);
     setProg(96);
 
     endProg();
