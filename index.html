@@ -533,7 +533,7 @@ async function answer() {
 
         if (event.type === 'progress') {
           addLog('answerLog', `[${event.step}] ${event.msg}`);
-          setProg('answerProgFill', event.step === '1/2' ? 40 : 80);
+          setProg('answerProgFill', event.step === '1/3' ? 30 : event.step === '2/3' ? 65 : 90);
 
         } else if (event.type === 'result') {
           outEl.textContent = event.text;
