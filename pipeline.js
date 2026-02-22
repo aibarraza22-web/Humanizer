@@ -14,6 +14,15 @@ import { gatherHumanExamples } from './scraper.js';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL = 'llama-3.3-70b-versatile';
 
+// Token budget for free tier (12k TPM):
+// ~3k for system prompt scaffolding + rules
+// ~2k for input text (158 words ~ 210 tokens, but we allow up to ~1500 words)
+// ~2k for Reddit examples (5 examples x 400 chars ~ 270 tokens each = ~1350 tokens)
+// ~3k headroom for output
+// = safely under 12k per request
+const EXAMPLE_COUNT = 5;       // number of Reddit examples to include
+const EXAMPLE_MAX_CHARS = 400; // max chars per example (roughly 85 tokens each)
+
 const BANNED = [
   'delve','delves','delving','crucial','multifaceted','comprehensive',
   'leverage','leveraging','utilize','utilizing','furthermore','moreover',
@@ -44,7 +53,7 @@ const AI_OPENERS = [
 ];
 
 // ─── Groq call ───────────────────────────────────────────────────────────────
-async function groq(apiKey, system, user, temp = 0.85, maxTokens = 4096) {
+async function groq(apiKey, system, user, temp = 0.85, maxTokens = 2048) {
   const res = await fetch(GROQ_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -96,6 +105,13 @@ function scoreText(text) {
 
 function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
 
+// Select the best N examples by human quality score, then shuffle for variety
+function pickExamples(humanExamples, n, maxChars) {
+  return shuffle(humanExamples)
+    .slice(0, n)
+    .map(e => ({ ...e, text: e.text.slice(0, maxChars) }));
+}
+
 // ─── PASS 1: Extract topic and keywords ──────────────────────────────────────
 async function extractTopic(apiKey, text) {
   const system = `You extract the core topic and search keywords from academic or essay text.
@@ -126,27 +142,27 @@ async function rewriteWithExamples(apiKey, inputText, humanExamples, strength, s
   // Higher temperatures = more unpredictable token choices = lower perplexity scores on GPTZero
   const temps = { aggressive: 1.1, standard: 0.98, subtle: 0.80 };
 
-  const examplesBlock = humanExamples.length > 0
-    ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REAL HUMAN WRITING — SCRAPED FROM REDDIT RIGHT NOW
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-These are actual Reddit posts and comments written by real people on this topic.
-They were not written by AI. They are raw, unpolished, and genuinely human.
-Study them obsessively:
-- How do they open sentences? (Not with "Furthermore" or "It is important to")
-- What vocabulary do they use? (Ordinary words, not academic jargon)
-- How long are their sentences? (Wildly varied — some very short, some long)
-- What imperfections do they have? (Fragments, asides, self-corrections, hedges)
-- How do they express opinions? (Directly, with "I think" and "honestly" and "the thing is")
+  // Pick best examples within token budget
+  const examples = pickExamples(humanExamples, EXAMPLE_COUNT, EXAMPLE_MAX_CHARS);
 
-${shuffle(humanExamples).slice(0, 10).map((e, i) =>
-  `[REAL HUMAN EXAMPLE ${i + 1} — ${e.source}]\n"${e.text}"`
+  const examplesBlock = examples.length > 0
+    ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REAL HUMAN WRITING — SCRAPED FROM REDDIT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+These are real Reddit posts on this exact topic. Not AI. Study every detail:
+- How they open sentences (never "Furthermore" or "It is important to")
+- Their vocabulary (ordinary, direct, not academic jargon)
+- Sentence length (wildly varied — very short to very long)
+- Imperfections (fragments, asides, hedges, self-corrections)
+- How they express opinions ("I think", "honestly", "the thing is")
+
+${examples.map((e, i) =>
+  `[EXAMPLE ${i + 1} — ${e.source}]\n"${e.text}"`
 ).join('\n\n')}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-YOUR REWRITE MUST SOUND LIKE THESE EXAMPLES
+YOUR REWRITE MUST SOUND LIKE THESE REAL PEOPLE — not like an essay assistant.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
-    : `(No Reddit examples available — write purely from natural human voice intuition)`;
+    : `(No Reddit examples — write from pure human voice intuition)`;
 
   const styleBlock = styleProfile ? buildStyleBlock(styleProfile) : '';
 
@@ -155,46 +171,35 @@ YOUR REWRITE MUST SOUND LIKE THESE EXAMPLES
 ${examplesBlock}
 ${styleBlock}
 
-━━ RULES YOU MUST FOLLOW ━━
+━━ RULES ━━
 
-MEANING: Preserve 100% of the original meaning. Every idea must stay. Nothing added, nothing removed.
+MEANING: Preserve 100% of the original meaning. Every idea stays. Nothing added, nothing removed.
 
 WORD COUNT — HARD LIMIT:
-The original text is ${wordTarget} words. You MUST output between ${minWords} and ${maxWords} words.
-Do not add examples, elaborations, or qualifications that weren't in the original.
-Replace ideas with ideas. One sentence in, one sentence out.
+Original is ${wordTarget} words. Output MUST be between ${minWords} and ${maxWords} words.
+Replace ideas with ideas. One sentence in, one sentence out. Do not pad or expand.
 
 PERPLEXITY — HOW GPTZero DETECTS AI:
-GPTZero measures whether each word was the most statistically expected choice.
-AI always picks the safest, most predictable word. You must not do this.
-For every 3 sentences, find one word that is completely correct but slightly unexpected —
-not wrong, just the word a careful human would choose rather than the word a model defaults to.
-Replace the predictable word with the more interesting, specific, or unusual-but-natural one.
-Example: instead of "shows" use "makes clear" or "gives away". Instead of "important" use "the thing that matters here". Instead of "however" use "but here's the thing".
+GPTZero flags text where every word is the statistically safest choice.
+For every 3 sentences, swap one predictable word for a slightly unexpected but natural one.
+e.g. "shows" → "makes clear" | "important" → "the thing that matters" | "however" → "but here's the thing"
 
-SENTENCE LENGTH — MANDATORY BURSTINESS:
-For every group of 4 sentences, you MUST have:
-  • At least 1 sentence under 8 words
-  • At least 1 sentence over 25 words
-  • The rest varied
+SENTENCE VARIATION — MANDATORY:
+Every 4 sentences must include: 1 under 8 words, 1 over 25 words, rest varied.
 
-FRAGMENTS: Add at least 3 standalone fragment sentences that REPLACE existing sentences:
-  "Which is the whole problem."  /  "Not always."  /  "Worth thinking about."
+FRAGMENTS: Replace 3 existing sentences with short standalone fragments:
+"Which is the whole problem." / "Not always." / "Worth thinking about."
 
-DASHES: Use at least 2 mid-thought interruptions — like this — before continuing.
+DASHES: Use 2 mid-thought dashes — like this — in existing sentences.
 
-HEDGES: Include at least 2 first-person hedges: "I think", "probably", "at least in my reading".
+HEDGES: Use 2 first-person hedges: "I think", "probably", "at least in my reading".
 
 BANNED WORDS — NEVER USE:
 ${BANNED.join(', ')}
 
-BANNED OPENERS:
-• "Additionally," / "Furthermore," / "Moreover,"
-• "It is important to..." / "It is worth noting..."
-• "This demonstrates..." / "This highlights..."
-• "In conclusion," / "To summarize,"
+BANNED OPENERS: "Additionally," / "Furthermore," / "It is important to..." / "This demonstrates..." / "In conclusion,"
 
-OUTPUT: Return ONLY the rewritten text. No preamble, nothing before or after.`;
+OUTPUT: Return ONLY the rewritten text. Nothing before or after.`;
 
   return await groq(apiKey, system, `Rewrite this text now:\n\n${inputText}`, temps[strength]);
 }
@@ -206,35 +211,35 @@ async function surgicalScrub(apiKey, text, humanExamples, originalWordCount) {
   const maxWords = Math.ceil(originalWordCount * 1.07);
 
   const problems = [];
-  if (burst < 0.48) problems.push(`BURSTINESS TOO LOW (${burst}, need >= 0.5) — break 2-3 sentences into short ones (under 8 words), expand 1-2 into long ones (25+ words). Restructure existing sentences, do NOT add new content.`);
-  if (banned.length > 0) problems.push(`BANNED WORDS FOUND — replace each with a natural alternative: ${banned.join(', ')}`);
-  if (aiOpeners.length > 0) problems.push(`AI SENTENCE OPENERS FOUND — rewrite these:\n${aiOpeners.slice(0, 4).map(s => `  • "${s.trim()}"`).join('\n')}`);
-  if (frags < 2) problems.push(`NOT ENOUGH FRAGMENTS (${frags} found, need >= 3) — convert 2 normal sentences into short standalone fragments. Replace, don't add.`);
+  if (burst < 0.48) problems.push(`BURSTINESS TOO LOW (${burst}) — break 2-3 sentences into short ones (under 8 words), expand 1-2 into long ones (25+ words). Restructure existing sentences, do NOT add content.`);
+  if (banned.length > 0) problems.push(`BANNED WORDS — replace each: ${banned.join(', ')}`);
+  if (aiOpeners.length > 0) problems.push(`AI OPENERS — rewrite these:\n${aiOpeners.slice(0, 4).map(s => `  • "${s.trim()}"`).join('\n')}`);
+  if (frags < 2) problems.push(`NOT ENOUGH FRAGMENTS (${frags}, need 3) — convert 2 sentences into short fragments. Replace, don't add.`);
 
-  const examplesReminder = humanExamples.length > 0
-    ? `\nTarget: writing that sounds like these Reddit examples:\n${shuffle(humanExamples).slice(0, 3).map(e => `"${e.text.slice(0, 150)}..."`).join('\n')}`
+  // Use 3 short examples as a style reminder — enough to anchor the voice
+  const examples = pickExamples(humanExamples, 3, 200);
+  const examplesReminder = examples.length > 0
+    ? `\nTarget voice — real Reddit writing on this topic:\n${examples.map(e => `"${e.text}"`).join('\n')}`
     : '';
 
-  const system = `You are an AI detection specialist making targeted surgical fixes. Fix ONLY the specific problems listed.
+  const system = `You are an AI detection specialist making surgical fixes. Fix ONLY the problems listed.
 
-WORD COUNT CONSTRAINT: Text must stay between ${minWords} and ${maxWords} words. Every fix is a swap, not an addition.
+WORD COUNT: Stay between ${minWords} and ${maxWords} words. Every fix is a swap, not an addition.
 
-PERPLEXITY RULE: For every 3 sentences, find one word that is completely correct but slightly unexpected —
-the word a careful human would choose rather than the word a model defaults to.
-Replace the predictable word with the more interesting one. This directly lowers GPTZero scores.
+PERPLEXITY RULE: For every 3 sentences, swap one predictable word for a slightly unexpected but natural one. This directly lowers GPTZero scores.
 
 PROBLEMS TO FIX:
-${problems.length > 0 ? problems.map((p, i) => `${i + 1}. ${p}`).join('\n') : 'No critical problems — make the improvements below:'}
+${problems.length > 0 ? problems.map((p, i) => `${i + 1}. ${p}`).join('\n') : 'No critical problems — apply improvements below:'}
 
-ALWAYS DO THESE (replace existing content, do not add):
-1. Find the 3 most predictable word choices and swap them for less obvious but natural alternatives
+ALWAYS DO THESE (swap, do not add):
+1. Replace the 3 most predictable word choices with less obvious but natural alternatives
 2. Rewrite the 2 most AI-sounding sentences from scratch at the same length
-3. Replace 2 technically-correct-but-no-real-person-would-say-this words
+3. Replace 2 words no real person would actually say
 4. Work 1 parenthetical aside (like this) into an existing sentence
 5. Cut or rewrite any sentence that just announces what the paragraph will say
-6. Edit 1 sentence so a statement is immediately qualified slightly
-7. Replace remaining transition phrases with how a person would actually connect those ideas
-8. Make at least 1 sentence start mid-thought with a dash or "I mean" or "or rather"${examplesReminder}
+6. Edit 1 sentence so a claim is immediately qualified slightly
+7. Replace remaining transition phrases with how a person would actually connect ideas
+8. Make 1 sentence start mid-thought: dash, "I mean", or "or rather"${examplesReminder}
 
 Output ONLY the fixed text.`;
 
@@ -248,27 +253,29 @@ async function verifyAndFix(apiKey, text, originalText, humanExamples) {
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
 
-  const exampleSnippets = shuffle(humanExamples).slice(0, 4).map(e => `"${e.text.slice(0, 200)}"`).join('\n');
+  // Use 3 examples at 250 chars each for verification — enough to check voice match
+  const examples = pickExamples(humanExamples, 3, 250);
+  const exampleSnippets = examples.map(e => `"${e.text}"`).join('\n');
 
-  const system = `You are a ruthless AI text detector. Find every remaining trace of AI writing and fix it.
+  const system = `You are a ruthless AI detector. Find every remaining trace of AI writing and fix it.
 
-What to look for:
+Look for:
 1. Sentences where every word is the most statistically expected choice — rewrite with less predictable but natural choices
 2. Paragraphs that flow too smoothly — add bumps, asides, self-corrections
-3. Remaining formulaic structure: topic sentence + supporting details + conclusion
-4. All sentences ending with a full stop and complete thought — add fragments
+3. Remaining formulaic structure: topic sentence → supporting details → conclusion
+4. All sentences ending with a full stop — fragments are missing
 5. Vocabulary that is "technically correct but suspiciously polished"
-6. Writer demonstrating a thesis rather than thinking through it
-7. Missing personality — reader should feel like a specific person wrote this
+6. Writer demonstrating a thesis rather than actually thinking through it
+7. Missing personality — reader should feel like a specific real person wrote this
 
-${humanExamples.length > 0 ? `Real human writing on this topic:\n${exampleSnippets}` : ''}
+${examples.length > 0 ? `Real human writing on this topic sounds like:\n${exampleSnippets}` : ''}
 
 Current problems:
-- Burstiness: ${burst} ${burst < 0.5 ? '(TOO LOW)' : '(ok)'}
+- Burstiness: ${burst} ${burst < 0.5 ? '(TOO LOW — fix sentence length variation)' : '(ok)'}
 - Banned words: ${banned.length > 0 ? banned.join(', ') : 'none'}
 - AI openers: ${aiOpeners.length > 0 ? aiOpeners.slice(0, 3).map(s => s.trim()).join(' | ') : 'none'}
 
-WORD COUNT CONSTRAINT: Original was ${originalWordCount} words. Output must be between ${minWords} and ${maxWords} words. Swap, do not add.
+WORD COUNT: Original was ${originalWordCount} words. Stay between ${minWords} and ${maxWords}. Swap, do not add.
 
 Output ONLY the corrected text.`;
 
@@ -285,7 +292,7 @@ async function enforceBurstiness(apiKey, text, originalWordCount) {
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
 
-  const system = `Fix sentence length variation. Burstiness is ${burst} — needs to be at least 0.5.
+  const system = `Fix sentence length variation. Burstiness is ${burst} — needs to reach 0.5.
 Average sentence length: ~${Math.round(avg)} words.
 
 DO THIS:
@@ -294,7 +301,7 @@ DO THIS:
 3. Turn 3 full sentences into fragments under 6 words each
 4. Combine 2 pairs of short sentences into longer ones (25+ words)
 
-Keep output between ${minWords} and ${maxWords} words. Restructure — do not add new content.
+Keep output between ${minWords} and ${maxWords} words. Restructure — do not add content.
 Output ONLY the fixed text.`;
 
   return await groq(apiKey, system, text, 0.65);
@@ -311,20 +318,20 @@ async function enforceWordCount(apiKey, text, originalWordCount) {
   const delta = currentWC - originalWordCount;
 
   if (delta > 0) {
-    const system = `This text is ${currentWC} words but needs to be between ${minWords} and ${maxWords} words (original: ${originalWordCount}).
+    const system = `This text is ${currentWC} words. Trim to between ${minWords} and ${maxWords} words (original: ${originalWordCount}).
 
 Trim by:
-1. Removing filler phrases ("in order to" → "to", "the fact that" → cut)
+1. Removing filler ("in order to" → "to", "the fact that" → cut)
 2. Shortening overly long sentences without changing meaning
-3. Cutting elaborations that weren't in the original
+3. Cutting elaborations not in the original
 Do NOT cut any ideas or key points.
 
 Output ONLY the trimmed text.`;
     return await groq(apiKey, system, text, 0.4, maxWords * 2);
   } else {
-    const system = `This text is ${currentWC} words but needs to be between ${minWords} and ${maxWords} words (original: ${originalWordCount}).
+    const system = `This text is ${currentWC} words. Expand to between ${minWords} and ${maxWords} words (original: ${originalWordCount}).
 
-Expand slightly by:
+Expand by:
 1. Adding a short concrete detail to 1-2 existing points
 2. Expanding a fragment or very short sentence into a fuller thought
 Do NOT add new arguments or change existing ideas.
