@@ -3,7 +3,7 @@
   "version": "8.0.0",
   "description": "AI humanizer — real Reddit scraping + multi-pass Mistral pipeline",
   "type": "module",
-  "_deploy": "2026-02-22-v5",
+  "_deploy": "2026-02-22-v6",
   "scripts": {
     "start": "node server.js",
     "build": "node --version"
