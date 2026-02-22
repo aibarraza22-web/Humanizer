@@ -672,215 +672,70 @@ select:focus{border-color:var(--accent)}
 <script>
 'use strict';
 
-// ════════════════════════════════════════
-//  SUPPORT DATA + RUNTIME CORPUS
-// ════════════════════════════════════════
-const SUBS = typeof FORCED_SUBSTITUTIONS !== 'undefined' ? FORCED_SUBSTITUTIONS : [];
-const FRAGS = typeof FRAGMENT_TEMPLATES !== 'undefined' ? FRAGMENT_TEMPLATES : [`Not the point.`, `Which is fine.`, `Worth knowing.`, `Hard to say.`, `Probably.`];
-const IMPERFS = typeof IMPERFECTION_RULES !== 'undefined' ? IMPERFECTION_RULES : [`Add one sentence that's under 5 words. Standalone.`, `Include one mild qualification like "I think" or "probably".`];
-
+let styleProfile = null;
 let runtimeCorpusCache = null;
 
-// ════════════════════════════════════════
-//  STATE
-// ═══════════════════════════════════════════════════════
-let styleProfile = null;
-let csvReference = null;
-// shape: { type:'sample'|'quiz'|'raw', raw?:string, examples?:string[], summary?:string }
-
-// ═══════════════════════════════════════════════════════
-//  BANNED WORDS & AI SENTENCE PATTERNS
-// ═══════════════════════════════════════════════════════
-const BANNED_WORDS = [
-  'delve','delves','delving','crucial','multifaceted','comprehensive',
-  'leverage','leveraging','utilize','utilizing','furthermore','moreover',
-  'in conclusion','ultimately','embark','underscores','underscore','paramount',
-  'pivotal','nuanced','robust','seamlessly','groundbreaking','landscape',
-  'realm','navigate','tapestry','holistic','synergy','streamline','foster',
-  'facilitate','notably','it is important','it is worth noting',
-  'it\'s worth noting','upon reflection','thus','hence','whereby','therein',
-  'aforementioned','subsequently','in summary','to summarize','in essence',
-  'it goes without saying','needless to say','as previously mentioned',
-  'it should be noted','as such','in light of this','with this in mind',
-  'it becomes evident','it is evident','it is clear','one can see',
-  'it can be argued','this demonstrates','this highlights','this suggests',
-  'building on this','this underscores','this shows that'
-];
-
-const AI_SENTENCE_OPENERS = [
-  /^(Additionally|Furthermore|Moreover|In addition),?\s/i,
-  /^(However|Nevertheless|Nonetheless),?\s/i,
-  /^(In conclusion|To summarize|In summary|Overall|Ultimately),?\s/i,
-  /^It is (important|crucial|essential|worth noting) (to|that)\s/i,
-  /^This (shows|demonstrates|highlights|suggests|indicates|underscores)\s/i,
-  /^One (can|must|should|might) (consider|note|observe|argue)\s/i,
-  /^It (can|could|should) be (argued|noted|observed|seen)\s/i,
-  /^(As such|As a result|As previously mentioned),?\s/i,
-  /^(In light of this|In light of these|With this in mind),?\s/i,
-  /^(When considering|When examining|By examining|By considering)\s/i,
-  /^(It is (clear|evident|apparent) that)\s/i,
-  /^(Building on this|Building upon)\s/i,
-];
-
-// ═══════════════════════════════════════════════════════
-//  UTILITY — shuffle array and take n items
-// ═══════════════════════════════════════════════════════
-function shuffleSlice(arr, n) {
-  return [...arr].sort(() => Math.random() - 0.5).slice(0, n);
-}
-
-function normalizeParagraph(text) {
-  if (!text) return '';
-  const clean = text.replace(/\s+/g, ' ').trim();
-  return clean.length >= 120 ? clean : '';
-}
-
-async function fetchRedditJson(url) {
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  if (!res.ok) throw new Error('Reddit request failed: ' + res.status);
-  return await res.json();
-}
-
-async function fetchRedditCorpus(limit = 24) {
-  const sources = [
-    'https://www.reddit.com/r/AskReddit/top.json?t=month&limit=40',
-    'https://www.reddit.com/r/CasualConversation/top.json?t=month&limit=40',
-    'https://www.reddit.com/r/TrueOffMyChest/top.json?t=month&limit=40',
-    'https://www.reddit.com/r/college/top.json?t=month&limit=40'
-  ];
-
-  const out = [];
-  for (const src of sources) {
-    try {
-      const json = await fetchRedditJson(src);
-      const posts = json?.data?.children || [];
-      for (const item of posts) {
-        const d = item?.data || {};
-        const body = normalizeParagraph(d.selftext || d.title || '');
-        if (body) out.push(body);
-        if (out.length >= limit) return out;
-      }
-    } catch (e) {
-      console.warn('Reddit source skipped:', src, e.message);
-    }
-  }
-  return out;
-}
-
-function buildContrastPairs(human, ai, count = 4) {
-  const max = Math.min(count, human.length, ai.length);
-  const pairs = [];
-  for (let i = 0; i < max; i++) {
-    const topicWords = (human[i].split(/\s+/).slice(0, 6).join(' ') || 'reddit writing sample').replace(/[.!,;:?]+$/g, '');
-    pairs.push({ topic: topicWords, human: human[i], ai: ai[i] });
-  }
-  return pairs;
-}
-
-async function synthesizeAiCorpus(apiKey, humanExamples) {
-  const list = humanExamples.map((h, i) => `${i + 1}. ${h}`).join('\n\n');
-  const system = `You generate benchmark AI-style paragraphs for detector contrast testing.
-Return ONLY valid JSON with this shape: {"ai":["...", "..."]}.
-Rules:
-- Create exactly ${humanExamples.length} paragraphs.
-- Paragraph i should be about the same topic as human example i.
-- Intentionally use common LLM phrasing patterns (clean transitions, formal topic sentences, predictable wording).
-- Keep each paragraph 90-160 words.`;
-  const raw = await callGroq(apiKey, system, `Human examples:
-
-${list}`, 0.35, 2200);
-  try {
-    const parsed = JSON.parse(raw);
-    const ai = Array.isArray(parsed.ai) ? parsed.ai.map(t => t.trim()).filter(Boolean) : [];
-    if (ai.length >= humanExamples.length) return ai.slice(0, humanExamples.length);
-    throw new Error('Invalid AI corpus length');
-  } catch (e) {
-    throw new Error('Could not build AI comparison corpus from Reddit topics.');
-  }
-}
-
-async function getRuntimeCorpus(apiKey) {
-  if (runtimeCorpusCache) return runtimeCorpusCache;
-
-  const human = await fetchRedditCorpus(24);
-  if (human.length < 8) throw new Error('Could not fetch enough Reddit writing samples right now. Try again in a minute.');
-
-  const pickedHuman = shuffleSlice(human, 8);
-  const ai = await synthesizeAiCorpus(apiKey, pickedHuman);
-  const contrasts = buildContrastPairs(pickedHuman, ai, 4);
-
-  runtimeCorpusCache = { human: pickedHuman, ai, contrasts };
-  return runtimeCorpusCache;
-}
+const wc = (t = '') => (t.trim().match(/\S+/g) || []).length;
 
 document.getElementById('inputText').addEventListener('input', () => {
-  document.getElementById('inWC').textContent = wc(document.getElementById('inputText').value) + ' words';
+  document.getElementById('inWC').textContent = `${wc(document.getElementById('inputText').value)} words`;
 });
 
-// ═══════════════════════════════════════════════════════
-//  TAB + METHOD SWITCHING
-// ═══════════════════════════════════════════════════════
+document.getElementById('outputText').addEventListener('input', () => {
+  document.getElementById('outWC').textContent = `${wc(document.getElementById('outputText').value)} words`;
+});
+
 function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
+  document.getElementById(`tab-${name}`).classList.add('active');
 }
 
 function switchMethod(name, btn) {
-  document.querySelectorAll('.sblock').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.meth-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('m-' + name).classList.add('active');
+  document.querySelectorAll('.meth-btn').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sblock').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
+  document.getElementById(`m-${name}`).classList.add('active');
 }
 
-// ═══════════════════════════════════════════════════════
-//  STATUS + PROGRESS
-// ═══════════════════════════════════════════════════════
 function setStatus(msg, type = '') {
+  const el = document.getElementById('statusEl');
+  el.className = `status ${type}`.trim();
   document.getElementById('statusMsg').textContent = msg;
-  document.getElementById('statusEl').className = 'status ' + type;
 }
 
 let pTimer = null;
 function startProg() {
-  document.getElementById('prog').classList.add('on');
-  document.getElementById('progFill').style.width = '0%';
-  let p = 0;
-  pTimer = setInterval(() => {
-    p = p < 78 ? p + Math.random() * 2.2 : p;
-    document.getElementById('progFill').style.width = Math.min(p, 78) + '%';
-  }, 260);
-}
-function setProg(pct) {
+  const prog = document.getElementById('prog');
+  const fill = document.getElementById('progFill');
+  prog.classList.add('on');
+  fill.style.width = '5%';
   clearInterval(pTimer);
-  document.getElementById('progFill').style.width = pct + '%';
+  let p = 5;
+  pTimer = setInterval(() => {
+    p = Math.min(92, p + Math.random() * 7);
+    fill.style.width = `${p}%`;
+  }, 500);
 }
+function setProg(pct) { document.getElementById('progFill').style.width = `${pct}%`; }
 function endProg() {
   clearInterval(pTimer);
   document.getElementById('progFill').style.width = '100%';
-  setTimeout(() => {
-    document.getElementById('prog').classList.remove('on');
-    document.getElementById('progFill').style.width = '0%';
-  }, 500);
+  setTimeout(() => document.getElementById('prog').classList.remove('on'), 250);
 }
 
-// ═══════════════════════════════════════════════════════
-//  STEP INDICATOR
-// ═══════════════════════════════════════════════════════
 function setStep(active) {
   for (let i = 1; i <= 3; i++) {
-    const el = document.getElementById('step' + i);
+    const el = document.getElementById(`step${i}`);
+    if (!el) continue;
     el.classList.remove('active', 'done');
     if (i < active) el.classList.add('done');
     else if (i === active) el.classList.add('active');
   }
 }
 
-// ═══════════════════════════════════════════════════════
-//  GROQ API WRAPPER
-// ═══════════════════════════════════════════════════════
-async function callGroq(apiKey, system, user, temp = 0.8, maxTokens = 4096) {
+async function callGroq(apiKey, system, user, temp = 0.7, maxTokens = 2200) {
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -889,392 +744,169 @@ async function callGroq(apiKey, system, user, temp = 0.8, maxTokens = 4096) {
     },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
+      temperature: temp,
+      max_tokens: maxTokens,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user }
-      ],
-      temperature: temp,
-      max_tokens: maxTokens
+      ]
     })
   });
+  if (!res.ok) throw new Error(`Groq error ${res.status}`);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || 'API error — check your key');
-  return data.choices[0].message.content.trim();
+  return data?.choices?.[0]?.message?.content?.trim() || '';
 }
 
-// ═══════════════════════════════════════════════════════
-//  CALL 1 — STYLE EXTRACTOR
-//  Analyzes user's writing sample and returns
-//  8 concrete imitable example sentences in their voice
-// ═══════════════════════════════════════════════════════
-async function extractStyle(apiKey, sample) {
-  const system = `You are a writing style analyst. Study the sample and produce exactly 8 NEW sentences that capture this person's unique writing voice. These will be used as imitation targets by a rewriter.
+function normalizeParagraph(text) {
+  const clean = (text || '').replace(/\s+/g, ' ').trim();
+  return clean.length >= 120 ? clean : '';
+}
 
+async function fetchRedditJson(url) {
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Reddit error ${res.status}`);
+  return await res.json();
+}
+
+async function fetchRedditCorpus(limit = 24) {
+  const sources = [
+    'https://www.reddit.com/r/AskReddit/top.json?t=month&limit=50',
+    'https://www.reddit.com/r/CasualConversation/top.json?t=month&limit=50',
+    'https://www.reddit.com/r/TrueOffMyChest/top.json?t=month&limit=50',
+    'https://www.reddit.com/r/college/top.json?t=month&limit=50'
+  ];
+  const out = [];
+  for (const src of sources) {
+    try {
+      const json = await fetchRedditJson(src);
+      for (const item of (json?.data?.children || [])) {
+        const d = item?.data || {};
+        const body = normalizeParagraph(d.selftext || d.title || '');
+        if (body) out.push(body);
+        if (out.length >= limit) return out;
+      }
+    } catch (_) {}
+  }
+  return out;
+}
+
+function shuffleSlice(arr, n) { return [...arr].sort(() => Math.random() - 0.5).slice(0, n); }
+
+function buildContrastPairs(human, ai, count = 4) {
+  return Array.from({ length: Math.min(count, human.length, ai.length) }, (_, i) => ({
+    topic: (human[i].split(/\s+/).slice(0, 8).join(' ') || 'reddit topic').replace(/[.!,;:?]+$/g, ''),
+    human: human[i],
+    ai: ai[i]
+  }));
+}
+
+async function synthesizeAiCorpus(apiKey, humanExamples) {
+  const system = `You generate benchmark AI-style paragraphs for contrast.
+Return ONLY strict JSON: {"ai":["...", "..."]}.
 Rules:
-- Write NEW sentences on any topic — do NOT copy from the sample
-- Each sentence must show their vocabulary level, formality, rhythm, contractions, sentence length pattern, and any quirks
-- Vary topics across the 8 sentences
-- Output ONLY the 8 sentences, numbered 1–8, one per line. Nothing else.`;
-
-  const result = await callGroq(apiKey, system, `Analyze and extract the style from this writing:\n\n${sample}`, 0.35, 600);
-
-  return result.split('\n')
-    .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim())
-    .filter(l => l.length > 12)
-    .slice(0, 8);
-}
-
-// ═══════════════════════════════════════════════════════
-//  EXTRACT HARD RULES — from BOTH quiz AND sample
-//  Both sources are checked independently and merged.
-//  Sample-derived rules don't override quiz rules,
-//  they STACK — giving two layers of enforcement.
-// ═══════════════════════════════════════════════════════
-function extractHardRules(profile) {
-  if (!profile) return [];
-  const rules = [];
-
-  // ── QUIZ RULES ──
-  if (profile.summary) {
-    const s = profile.summary.toLowerCase();
-
-    // Conjunction rule — most important, must be airtight
-    if (s.includes('never start sentences with conjunctions')) {
-      rules.push('ABSOLUTE — check every single sentence before outputting: Zero sentences may begin with "And", "But", "So", "Or", or "Yet". Scan the output and rewrite any that do.');
-    } else if (s.includes('sometimes start')) {
-      rules.push('Start a sentence with "And", "But", or "So" at most once in the entire output — no more than once.');
-    } else if (s.includes('often start')) {
-      rules.push('Freely start sentences with "And", "But", or "So" — this is natural for this writer.');
-    }
-
-    // Contraction rule
-    if (s.includes('rarely or never use contractions')) {
-      rules.push('ABSOLUTE — no contractions ever: write "do not" not "don\'t", "it is" not "it\'s", "cannot" not "can\'t", "will not" not "won\'t". Check every word.');
-    } else if (s.includes('always use contractions')) {
-      rules.push('Use contractions throughout — it\'s, don\'t, can\'t, won\'t, I\'m, they\'re, we\'ve.');
-    } else if (s.includes('usually use contractions')) {
-      rules.push('Use contractions naturally most of the time. Only occasionally write the full form.');
-    }
-
-    // Formality
-    if (s.includes('very casual')) {
-      rules.push('Keep tone very casual throughout — like explaining to a friend, not writing for a professor.');
-    } else if (s.includes('formal and precise')) {
-      rules.push('Maintain a formal precise tone throughout — no slang, no colloquialisms, no casual phrasing.');
-    } else if (s.includes('balanced and professional')) {
-      rules.push('Keep a balanced professional tone — clear and approachable but not casual.');
-    }
-
-    // Sentence length
-    if (s.includes('short and punchy')) {
-      rules.push('Keep sentences short — most under 14 words. Punch. Don\'t meander or over-explain in one sentence.');
-    } else if (s.includes('long and detailed')) {
-      rules.push('Use longer detailed sentences — let ideas develop within a sentence, connect clauses naturally.');
-    } else if (s.includes('very mixed')) {
-      rules.push('Vary sentence lengths dramatically — some must be under 6 words, some over 30. Make it jagged.');
-    }
-
-    // Vocabulary
-    if (s.includes('simple everyday words')) {
-      rules.push('Use only simple everyday vocabulary. If a simpler word exists, always use it. No academic or formal words.');
-    } else if (s.includes('academic or advanced vocabulary')) {
-      rules.push('Academic vocabulary is fine where it fits naturally.');
-    }
-
-    // Rhetorical questions
-    if (s.includes('never use rhetorical questions')) {
-      rules.push('Do not use rhetorical questions at any point.');
-    } else if (s.includes('often use rhetorical questions')) {
-      rules.push('Use rhetorical questions where natural — this writer uses them.');
-    }
-  }
-
-  // ── SAMPLE-DERIVED RULES (independent from quiz) ──
-  if (profile.examples && profile.examples.length > 0) {
-    const exText = profile.examples.join(' ');
-
-    // Contraction detection from sample
-    const hasContr = /\b(it's|don't|can't|won't|I'm|they're|we've|you're|isn't|aren't|didn't|couldn't|wouldn't|I've|I'd)\b/i.test(exText);
-    const alreadyContr = rules.some(r => r.toLowerCase().includes('contraction'));
-    if (!alreadyContr) {
-      if (!hasContr && exText.length > 80) {
-        rules.push('The writer\'s own sample contains no contractions — avoid them throughout the rewrite.');
-      } else if (hasContr) {
-        rules.push('The writer\'s sample uses contractions naturally — use them freely in the rewrite.');
-      }
-    }
-
-    // Conjunction-start detection from sample
-    const conjCount = profile.examples.filter(s => /^(And|But|So|Or|Yet)\b/.test(s.trim())).length;
-    const alreadyConj = rules.some(r => r.toLowerCase().includes('"but"') || r.toLowerCase().includes('"and"') || r.toLowerCase().includes('conjunctions'));
-    if (!alreadyConj) {
-      if (conjCount === 0 && profile.examples.length >= 3) {
-        rules.push('The writer\'s sample never starts sentences with And, But, So, Or, or Yet — do not do this in the rewrite.');
-      } else if (conjCount >= 2) {
-        rules.push('The writer often starts sentences with And or But — use this naturally in the rewrite.');
-      }
-    }
-
-    // Average sentence length from sample
-    const avgLen = profile.examples.map(s => s.split(/\s+/).length).reduce((a, b) => a + b, 0) / profile.examples.length;
-    const alreadyLen = rules.some(r => r.toLowerCase().includes('sentence') && (r.includes('short') || r.includes('long') || r.includes('14') || r.includes('30') || r.includes('jagged')));
-    if (!alreadyLen) {
-      if (avgLen < 11) rules.push('The writer\'s sample uses short sentences — mirror this, keep most under 14 words.');
-      else if (avgLen > 24) rules.push('The writer\'s sample uses long flowing sentences — let ideas develop naturally within sentences.');
-    }
-
-    // Detect first-person usage
-    const firstPerson = /\b(I |I'm|I've|I'd|my |me )\b/i.test(exText);
-    if (firstPerson) {
-      rules.push('The writer writes in first person — maintain first person voice where appropriate in the rewrite.');
-    }
-  }
-
-  return rules;
-}
-
-// ═══════════════════════════════════════════════════════
-//  BURSTINESS CALCULATOR
-//  Coefficient of variation of sentence lengths.
-//  Human writing: 0.5–1.0. AI writing: 0.15–0.4.
-// ═══════════════════════════════════════════════════════
-function calcBurstiness(text) {
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-  const lengths = sentences.map(s => s.trim().split(/\s+/).length).filter(l => l > 0);
-  if (lengths.length < 2) return 0;
-  const avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
-  const variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
-  return parseFloat((Math.sqrt(variance) / avg).toFixed(3));
-}
-
-// ═══════════════════════════════════════════════════════
-//  CALL 2 — REWRITER
-//  Core humanization pass with:
-//  - Persona-based writing (not "sound human", BE someone)
-//  - Hard rules from quiz AND sample both enforced
-//  - 8 random human paragraphs as positive examples
-//  - 8 random AI paragraphs as negative examples
-//  - Same-topic human-vs-AI contrasts for calibration
-//  - Sentence variance rule built into prompt mathematically
-// ═══════════════════════════════════════════════════════
-function splitSentences(text) {
-  return (text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text]).map(s => s.trim()).filter(Boolean);
-}
-
-// ════════════════════════════════════════
-//  CALL 2 — REWRITER
-// ════════════════════════════════════════
-async function rewriteText(apiKey, inputText, strength, styleExamples, runtime) {
-  const wordTarget = wc(inputText);
-
-function buildVoiceProfile(sample, examples = []) {
-  const base = `${sample || ''} ${examples.join(' ')}`.trim();
-  const sentences = splitSentences(base);
-  const lengths = sentences.map(s => wc(s));
-  const avg = lengths.length ? lengths.reduce((a, b) => a + b, 0) / lengths.length : 0;
-  const variance = lengths.length ? lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length : 0;
-  const transitions = ['however', 'therefore', 'furthermore', 'moreover', 'meanwhile', 'also', 'so', 'but', 'and'];
-  const transitionCount = transitions.reduce((a, t) => a + ((base.toLowerCase().match(new RegExp(`\\b${t}\\b`, 'g')) || []).length), 0);
-  const shortCount = lengths.filter(l => l < 8).length;
-  const longCount = lengths.filter(l => l > 22).length;
-
-  return {
-    avgSentenceLength: Number(avg.toFixed(1)),
-    sentenceVariance: Number((Math.sqrt(variance || 0)).toFixed(2)),
-    formalLevel: /\b(therefore|moreover|consequently|thus)\b/i.test(base) ? 'formal-leaning' : 'casual-balanced',
-    usesParentheses: /[()]/.test(base),
-    usesFragments: shortCount > 0,
-    rhetoricalQuestionRate: sentences.length ? Number((sentences.filter(st => st.endsWith('?')).length / sentences.length).toFixed(2)) : 0,
-    transitionDensity: sentences.length ? Number((transitionCount / sentences.length).toFixed(2)) : 0,
-    sentenceMix: { short: shortCount, long: longCount, total: sentences.length }
-  };
-}
-
-function computeMetrics(original, revised, voiceProfile) {
-  const originalWords = original.trim().split(/\s+/).filter(Boolean);
-  const revisedWords = revised.trim().split(/\s+/).filter(Boolean);
-  const minLen = Math.max(1, Math.min(originalWords.length, revisedWords.length));
-  let changed = Math.abs(originalWords.length - revisedWords.length);
-  for (let i = 0; i < minLen; i++) if (originalWords[i] !== revisedWords[i]) changed++;
-  const editRatio = minLen ? changed / minLen : 0;
-
-  const vagueWords = ['things', 'stuff', 'a lot', 'various', 'in many ways'];
-  const vagueCount = vagueWords.reduce((a, v) => a + ((revised.toLowerCase().match(new RegExp(v.replace(/ /g, '\\s+'), 'g')) || []).length), 0);
-  const specificityMarkers = {
-    numbers: (revised.match(/\b\d+(?:\.\d+)?\b/g) || []).length,
-    namedEntities: extractNamedEntities(revised).length,
-    concreteHints: (revised.match(/\b(example|for instance|for example|specifically|because|works by|instead of)\b/gi) || []).length
-  };
-
-  const runtime = await getRuntimeCorpus(apiKey);
-  const humanSample = runtime.human;
-  const aiSample = runtime.ai;
-  const contrastSample = runtime.contrasts;
-
-  const datasetBlock = `\n\n━━ REAL HUMAN WRITING (live Reddit JSON samples, 8 shown this run) — write like this ━━\nThese are pulled from real Reddit users. Follow their unpredictability, directness, and uneven rhythm:\n\n${humanSample.map((p, i) => `[Human example ${i + 1}]\n${p}`).join('\n\n')}\n\n━━ AI LOOKALIKE WRITING (generated on same topics, 8 shown this run) — NEVER write like this ━━\nThese were generated to mimic standard AI tendencies. Your output must avoid this structure and tone:\n\n${aiSample.map((p, i) => `[AI example ${i + 1}]\n${p}`).join('\n\n')}\n\n━━ SAME-TOPIC CONTRASTS (Reddit human vs AI lookalike, 4 shown this run) ━━\nInternalize the exact difference and stay on the HUMAN side sentence-by-sentence:\n\n${contrastSample.map(c => `[Topic seed: ${c.topic}]\n▸ HUMAN: ${c.human}\n▸ AI: ${c.ai}`).join('\n\n')}`;
-
-async function diagnoseDraft(apiKey, inputText) {
-  const system = `You are a revision diagnostician. No rewriting. Return strict JSON with keys: summary, must_preserve (array), problems (array of tags).
-Allowed problem tags: vague_claim, weak_topic_sentence, repetitive_structure, missing_example, logic_gap, awkward_transition, wordiness.
-Identify factual anchors (names, dates, numbers, quotes, citations, claims) inside must_preserve.`;
-  const user = `Draft:
-${inputText}`;
-  const raw = await callGroq(apiKey, system, user, 0.2, 700);
+- Make exactly ${humanExamples.length} paragraphs.
+- Paragraph i follows same topic as human i.
+- Deliberately use polished, predictable, template-like AI tone.`;
+  const user = `Human topic references:\n${humanExamples.map((h, i) => `${i + 1}. ${h}`).join('\n\n')}`;
+  const raw = await callGroq(apiKey, system, user, 0.4, 1800);
   try {
     const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-    parsed.problems = (parsed.problems || []).filter(Boolean);
-    return parsed;
+    const ai = Array.isArray(parsed.ai) ? parsed.ai.map(t => t.trim()).filter(Boolean) : [];
+    return ai.slice(0, humanExamples.length);
   } catch {
-    return { summary: '', must_preserve: [], problems: ['wordiness'] };
+    return [];
   }
 }
 
-async function rewriteText(apiKey, inputText, strength, styleExamples, diagnosis, voiceProfile) {
-  const hardRules = extractHardRules(styleProfile);
-  const wordTarget = wc(inputText);
-  const preserve = (diagnosis?.must_preserve || []).join('; ');
-  const styleBlock = styleExamples && styleExamples.length
-    ? `Voice sample sentences (authority for style):
-${styleExamples.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
-    : '';
+async function getRuntimeCorpus(apiKey) {
+  if (runtimeCorpusCache) return runtimeCorpusCache;
+  const human = shuffleSlice(await fetchRedditCorpus(30), 8);
+  if (human.length < 4) throw new Error('Could not fetch enough Reddit writing samples.');
+  const ai = await synthesizeAiCorpus(apiKey, human);
+  if (ai.length !== human.length) throw new Error('Could not synthesize AI contrast set.');
+  runtimeCorpusCache = { human, ai, contrasts: buildContrastPairs(human, ai, 4) };
+  return runtimeCorpusCache;
+}
 
-  const system = `CORE ROLE: You are a voice-preserving humanizer. Keep the writing sounding like a real person in a single energetic pass, never like a formal memo, textbook, or template.
+async function extractStyle(apiKey, sample) {
+  const system = `Extract exactly 8 short style-anchor sentences from the user's writing voice.
+Return strict JSON: {"examples":["..."]}.`;
+  const raw = await callGroq(apiKey, system, sample, 0.3, 700);
+  const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+  return (parsed.examples || []).slice(0, 8);
+}
 
-GOAL: Preserve 100% of the original meaning, facts, numbers, names, and intent while making rhythm and phrasing feel natural and personal.
+function splitSentences(text) { return (text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []).map(s => s.trim()).filter(Boolean); }
 
-INPUTS:
-- draft_text
-- optional voice_sample
+function computeMetrics(original, revised) {
+  const o = original.trim().split(/\s+/).filter(Boolean);
+  const r = revised.trim().split(/\s+/).filter(Boolean);
+  const minLen = Math.max(1, Math.min(o.length, r.length));
+  let changed = Math.abs(o.length - r.length);
+  for (let i = 0; i < minLen; i++) if (o[i] !== r[i]) changed++;
 
-HARD RULES:
-- Burstiness is required: mix very short sentences with some longer run-ons.
-- Keep roughly 65–85% of original wording/phrasing.
-- Preserve all must-keep facts exactly.
-- Add human texture naturally: contractions, light hedges, occasional aside, 1–2 dashes or ellipses when it fits.
-- Vary sentence starters, paragraph lengths, punctuation, and transitions.
-- Avoid robotic words and stock transitions (delve, tapestry, realm, crucial, intricate, pivotal, in conclusion, moreover, therefore, additionally).
-- If adding detail, use quick concrete examples instead of abstract jargon.
+  const sentences = splitSentences(revised);
+  const lens = sentences.map(s => wc(s));
+  const avg = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 0;
+  const variance = lens.length ? lens.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lens.length : 0;
 
-ANTI-ROBOTIC RULES:
-- Allow a few imperfect human moves: fragment, parenthetical, mild run-on, sentence starting with And/But.
-- Do not over-regularize structure.
-- If tone drifts formal, pull it back to conversational unless voice sample is formal.
-- Rhythm test: if it sounds like a TED Talk, rewrite it.
+  const words = r.map(w => w.toLowerCase().replace(/[^a-z0-9']/g, '')).filter(Boolean);
+  const freq = new Map();
+  words.forEach(w => freq.set(w, (freq.get(w) || 0) + 1));
+  const repetitionScore = [...freq.values()].filter(v => v > 3).length;
 
-PIPELINE (silent):
-Stage 1 — Diagnose
-- Extract must-keep facts, numbers, quotes.
-- Flag repetition and rigid structure.
+  return {
+    editRatio: changed / minLen,
+    specificityMarkers: {
+      numbers: (revised.match(/\b\d+(?:\.\d+)?\b/g) || []).length,
+      namedEntities: (revised.match(/\b[A-Z][a-z]{2,}\b/g) || []).length,
+      concreteHints: (revised.match(/\b(for example|for instance|specifically|because|instead of)\b/gi) || []).length
+    },
+    repetitionScore,
+    sentenceLengthVariance: Number((Math.sqrt(variance || 0) / (avg || 1)).toFixed(3)),
+    voiceSimilarity: null
+  };
+}
 
-Stage 2 — Rewrite
-- Apply rules above aggressively.
-- Keep edit ratio around 15–35%.
+async function rewriteText(apiKey, inputText, strength, styleExamples, runtime) {
+  const target = wc(inputText);
+  const styleBlock = styleExamples?.length
+    ? `USER STYLE ANCHORS (imitate this voice):\n${styleExamples.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+    : 'USER STYLE ANCHORS: none saved';
 
-Stage 3 — Self-check
-- Confirm facts are unchanged.
-- Confirm sentence/paragraph variance improved.
-- If still rigid, inject 2–3 more human quirks and retry up to 2 times.
+  const datasetBlock = `ONLY USE THESE REFERENCE SOURCES:\n\nREAL HUMAN (Reddit pulled this run):\n${runtime.human.map((p, i) => `[H${i + 1}] ${p}`).join('\n\n')}\n\nAI LOOKALIKES (generated from same topics this run):\n${runtime.ai.map((p, i) => `[A${i + 1}] ${p}`).join('\n\n')}\n\nHUMAN vs AI CONTRASTS:\n${runtime.contrasts.map(c => `Topic: ${c.topic}\nHUMAN: ${c.human}\nAI: ${c.ai}`).join('\n\n')}`;
 
-Must preserve: ${preserve || 'all factual content from draft'}.
-Tagged problems to edit: ${(diagnosis?.problems || []).join(', ') || 'wordiness'}.
-Voice profile: ${voiceProfile ? JSON.stringify(voiceProfile) : 'none'}.
-${styleBlock}
-Optional dataset reference (quality checks only, never style authority): ${csvReference ? csvReference : 'none'}.
+  const system = `You are a rewrite engine.
+Hard constraints:
+- Rewrite to sound human and natural.
+- Use ONLY contrast cues from the provided HUMAN vs AI datasets.
+- Do not invent any external writing corpus or source.
+- Preserve original meaning and factual claims.
+- Keep output within ±10% of ${target} words.
+- Strength: ${strength}.`;
 
-OUTPUT RULE:
-- Return only the final revised text, around ${wordTarget} words.`;
+  const user = `${styleBlock}
 
-  return await callGroq(apiKey, system, `Draft:
-${inputText}`, strength === 'aggressive' ? 0.65 : strength === 'standard' ? 0.55 : 0.45, 3000);
+${datasetBlock}
+
+TEXT TO REWRITE:
+${inputText}
+
+Return only revised text.`;
+  return await callGroq(apiKey, system, user, 0.75, 2600);
 }
 
 async function alignToCorpus(apiKey, text, runtime, wordTarget) {
-  const human = runtime.human.slice(0, 10);
-  const ai = runtime.ai.slice(0, 10);
-  const system = `You are a strict style calibrator.
-Goal: Make the candidate text much closer to HUMAN references and far from AI references.
-
-Return ONLY the revised text.
-Rules:
-- Preserve the exact original meaning.
-- Keep within 10% of ${wordTarget} words.
-- Borrow only STYLE signals from HUMAN references (rhythm, sentence openings, directness, imperfections).
-- Explicitly avoid AI reference patterns (predictable transitions, formal topic-sentence cadence, repetitive structure).
-- Make enough edits that the style shift is obvious.`;
-
-  const prompt = `CANDIDATE TEXT:
-${text}
-
-HUMAN REFERENCES:
-${human.map((h, i) => `${i + 1}. ${h}`).join('\n\n')}
-
-AI REFERENCES:
-${ai.map((a, i) => `${i + 1}. ${a}`).join('\n\n')}`;
-  return await callGroq(apiKey, system, prompt, 0.72);
+  const system = `Calibrate candidate text toward HUMAN references and away from AI references.
+Use only supplied Reddit human samples and generated AI contrasts.
+Keep meaning unchanged. Keep within ±10% of ${wordTarget} words.
+Return only revised text.`;
+  const user = `CANDIDATE:\n${text}\n\nHUMAN:\n${runtime.human.join('\n\n')}\n\nAI:\n${runtime.ai.join('\n\n')}`;
+  return await callGroq(apiKey, system, user, 0.5, 2200);
 }
 
-// ════════════════════════════════════════
-//  CALL 3 — SCRUBBER
-//  Analyzes the actual rewrite output and
-//  gives surgical instructions targeted to
-//  what's specifically wrong with THIS text
-// ════════════════════════════════════════
-async function scrubText(apiKey, text) {
-  const burst = calcBurstiness(text);
-  const needsBurst = burst < 0.48;
-  const fragCount = countFragments(text);
-  const needsFrags = fragCount < 2;
+async function scrubText(_apiKey, text) { return text; }
 
-  const specificityCurrent = metrics.specificityMarkers.numbers + metrics.specificityMarkers.namedEntities + metrics.specificityMarkers.concreteHints;
-  const specificityOriginal = originalMetrics.specificityMarkers.numbers + originalMetrics.specificityMarkers.namedEntities + originalMetrics.specificityMarkers.concreteHints;
-
-  const failed = [];
-  if (mode === 'light' && (metrics.editRatio < 0.10 || metrics.editRatio > 0.30)) failed.push('edit_ratio');
-  if (specificityCurrent < specificityOriginal) failed.push('specificity_markers');
-  if (metrics.repetitionScore > originalMetrics.repetitionScore) failed.push('repetition_score');
-  if (voiceProfile && originalMetrics.voiceSimilarity !== null && metrics.voiceSimilarity !== null && metrics.voiceSimilarity < originalMetrics.voiceSimilarity) failed.push('voice_similarity');
-
-  if (failed.length) {
-    const system = `Run Stage C verification and self-correction.
-Checklist must pass: Facts unchanged ✅, Specificity improved ✅, Not mostly synonyms ✅, Voice matches sample ✅.
-Failed checks: ${failed.join(', ')}.
-Use diagnosis + must_preserve to revert any factual drift and correct only needed lines.`;
-    current = await callGroq(apiKey, system, `Original:
-${original}
-
-Diagnosis:
-${JSON.stringify(diagnosis)}
-
-Current revision:
-${current}
-
-Voice profile:
-${JSON.stringify(voiceProfile)}
-
-Style sample:
-${(styleExamples || []).join('\n')}`, 0.45, 3200);
-    metrics = computeMetrics(original, current, voiceProfile);
-  }
-
-  return { text: current, metrics };
-}
-
-// ═══════════════════════════════════════════════════════
-//  CALL 3 — SCRUBBER
-//  Research-backed second pass.
-//  - Calculates burstiness of the rewritten text
-//  - Identifies AI sentence openers by pattern
-//  - Gives model precise, surgical instructions
-//    based on what's actually wrong with THIS text
-//  - Low temp for precision, not creativity
-// ═══════════════════════════════════════════════════════
-async function scrubText(apiKey, text) {
-  return text;
-}
-
-// ═══════════════════════════════════════════════════════
-//  MAIN RUN
-// ═══════════════════════════════════════════════════════
 async function run() {
   const apiKey = document.getElementById('apiKey').value.trim();
   const inputText = document.getElementById('inputText').value.trim();
@@ -1283,69 +915,55 @@ async function run() {
 
   if (!apiKey) return setStatus('Enter your Groq API key at the top.', 'err');
   if (!inputText) return setStatus('Paste some draft text first.', 'err');
-  if (wc(inputText) > 1400) return setStatus('Text is too long — split into chunks under 1400 words for best results.', 'err');
 
   btn.disabled = true;
   runtimeCorpusCache = null;
   document.getElementById('scoreRow').style.display = 'none';
   document.getElementById('outputText').value = '';
-  document.getElementById('outWC').textContent = '0 words';
 
   startProg();
   setStep(1);
-  setStatus('Pass 1 — Building live Reddit corpus + rewriting...', 'working');
+  setStatus('Pass 1 — Pulling Reddit human writing + generating AI contrasts...', 'working');
 
   try {
     let styleExamples = styleProfile?.examples || null;
-    if (styleProfile?.type === 'raw' && !styleProfile.examples) {
-      setStatus('Analyzing your writing style first...', 'working');
-      try {
-        const examples = await extractStyle(apiKey, styleProfile.raw);
-        styleProfile.examples = examples;
-        styleProfile.type = 'sample';
-        styleExamples = examples;
-        updateBadge('✓ Style analyzed — ' + examples.length + ' style examples extracted');
-        showExamples(examples);
-      } catch (e) {}
+    if (styleProfile?.type === 'raw' && !styleExamples) {
+      styleExamples = await extractStyle(apiKey, styleProfile.raw);
+      styleProfile.examples = styleExamples;
+      styleProfile.type = 'sample';
+      updateBadge(`✓ Style analyzed — ${styleExamples.length} examples`);
+      showExamples(styleExamples);
     }
 
-    const runtime = await getRuntimeCorpus(apiKey, inputText);
-    setStatus('Pass 1 — Rewriting against topic-matched human/AI corpus...', 'working');
+    const runtime = await getRuntimeCorpus(apiKey);
     const rewritten = await rewriteText(apiKey, inputText, strength, styleExamples, runtime);
-    setProg(50);
+    setProg(60);
 
     setStep(2);
-    setStatus('Pass 2 — Aligning draft closer to HUMAN corpus and away from AI corpus...', 'working');
+    setStatus('Pass 2 — Aligning to human-vs-AI contrasts only...', 'working');
     const aligned = await alignToCorpus(apiKey, rewritten, runtime, wc(inputText));
-    setProg(78);
-
-    setStatus('Pass 2b — Surgical scrub: fragments + perplexity + burstiness...', 'working');
     const final = await scrubText(apiKey, aligned);
-    setProg(96);
 
+    setStep(3);
+    setProg(96);
     endProg();
     document.getElementById('outputText').value = final;
-    document.getElementById('outWC').textContent = wc(final) + ' words';
+    document.getElementById('outWC').textContent = `${wc(final)} words`;
 
+    const metrics = computeMetrics(inputText, final);
     const specificityTotal = metrics.specificityMarkers.numbers + metrics.specificityMarkers.namedEntities + metrics.specificityMarkers.concreteHints;
     document.getElementById('sLen').textContent = `${Math.round(metrics.editRatio * 100)}%`;
-    document.getElementById('sLen').className = 'scard-val ' + (metrics.editRatio >= 0.1 && metrics.editRatio <= 0.3 ? 'g' : 'm');
-
+    document.getElementById('sLen').className = 'scard-val ' + (metrics.editRatio >= 0.1 ? 'g' : 'm');
     document.getElementById('sStyle').textContent = `${specificityTotal} markers`;
     document.getElementById('sStyle').className = 'scard-val ' + (specificityTotal >= 2 ? 'g' : 'm');
-
     document.getElementById('sWords').textContent = `${metrics.repetitionScore}`;
     document.getElementById('sWords').className = 'scard-val ' + (metrics.repetitionScore <= 2 ? 'g' : 'm');
-
     document.getElementById('sBurst').textContent = `${metrics.sentenceLengthVariance}`;
-    document.getElementById('sBurst').className = 'scard-val ' + (metrics.sentenceLengthVariance >= 0.35 ? 'g' : 'm');
-
-    document.getElementById('sPasses').textContent = metrics.voiceSimilarity !== null ? `${metrics.voiceSimilarity}` : 'n/a';
-    document.getElementById('sPasses').className = 'scard-val ' + (metrics.voiceSimilarity === null || metrics.voiceSimilarity >= 0.75 ? 'g' : 'm');
-
+    document.getElementById('sBurst').className = 'scard-val ' + (metrics.sentenceLengthVariance >= 0.3 ? 'g' : 'm');
+    document.getElementById('sPasses').textContent = 'n/a';
+    document.getElementById('sPasses').className = 'scard-val g';
     document.getElementById('scoreRow').style.display = 'flex';
-    setStatus('Done. Diagnose → Edit → Verify complete.', 'ok');
-
+    setStatus('Done. Interactive UI restored and corpus constraints enforced.', 'ok');
   } catch (err) {
     endProg();
     setStep(1);
@@ -1355,74 +973,40 @@ async function run() {
   btn.disabled = false;
 }
 
-// ═══════════════════════════════════════════════════════
-//  STYLE SAVE FUNCTIONS
-// ═══════════════════════════════════════════════════════
 async function saveFromSample() {
   const sample = document.getElementById('styleSample').value.trim();
-  if (wc(sample) < 15) {
-    alert('Please paste at least a few sentences of your real writing (15+ words).');
-    return;
-  }
-
+  if (wc(sample) < 15) return alert('Please paste at least 15 words of your writing sample.');
   const apiKey = document.getElementById('apiKey').value.trim();
   const btn = document.getElementById('saveSampleBtn');
   btn.disabled = true;
   btn.textContent = 'Analyzing...';
-  updateBadge('Analyzing your writing style...');
-
-  if (!apiKey) {
-    styleProfile = { type: 'raw', raw: sample, examples: null, summary: null };
-    updateBadge('Sample saved — style analysis will run on first revision');
-    btn.disabled = false;
-    btn.textContent = 'Analyze & Save →';
-    return;
-  }
-
   try {
-    const examples = await extractStyle(apiKey, sample);
-    styleProfile = { type: 'sample', raw: sample, examples, summary: null };
-    updateBadge('✓ Style analyzed — ' + examples.length + ' style examples extracted');
-    showExamples(examples);
-  } catch (e) {
-    styleProfile = { type: 'raw', raw: sample, examples: null, summary: null };
+    if (!apiKey) {
+      styleProfile = { type: 'raw', raw: sample, examples: null };
+      updateBadge('Sample saved — style analysis runs on first revision');
+    } else {
+      const examples = await extractStyle(apiKey, sample);
+      styleProfile = { type: 'sample', raw: sample, examples };
+      updateBadge(`✓ Style analyzed — ${examples.length} style examples extracted`);
+      showExamples(examples);
+    }
+  } catch {
+    styleProfile = { type: 'raw', raw: sample, examples: null };
     updateBadge('Sample saved — analysis will retry on next revision');
   }
-
   btn.disabled = false;
   btn.textContent = 'Analyze & Save →';
 }
 
 function saveFromQuiz() {
-  const get = n => {
-    const el = document.querySelector(`input[name="${n}"]:checked`);
-    return el ? el.value : '';
-  };
-  const extra = document.getElementById('qExtra').value.trim();
-
-  const parts = [
-    get('q1'),
-    get('q2'),
-    get('q3'),
-    get('q4'),
-    get('q5'),
-    get('q6'),
-    extra
-  ].filter(Boolean);
-
-  styleProfile = {
-    type: 'quiz',
-    summary: parts.join(' | '),
-    examples: null,
-    raw: null
-  };
-
+  const get = n => document.querySelector(`input[name="${n}"]:checked`)?.value || '';
+  const extra = document.getElementById('qExtra')?.value?.trim() || '';
+  styleProfile = { type: 'quiz', summary: [get('q1'), get('q2'), get('q3'), get('q4'), get('q5'), extra].filter(Boolean).join(' | '), examples: null, raw: null };
   updateBadge('✓ Style saved from quiz');
 }
 
 function clearStyle() {
   styleProfile = null;
-  csvReference = null;
   updateBadge(null);
   document.getElementById('examplesBox').className = 'examples-box';
 }
@@ -1434,43 +1018,14 @@ function updateBadge(msg) {
 }
 
 function showExamples(examples) {
-  const box = document.getElementById('examplesBox');
-  document.getElementById('examplesContent').innerHTML = examples
-    .map(e => `<div class="ex-item">${e}</div>`)
-    .join('');
-  box.className = 'examples-box show';
+  document.getElementById('examplesContent').innerHTML = examples.map(e => `<div class="ex-item">${e}</div>`).join('');
+  document.getElementById('examplesBox').className = 'examples-box show';
 }
 
-async function loadCsvReference(event) {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-
-  const readSlice = async (start, end) => {
-    const blob = file.slice(start, end);
-    return await blob.text();
-  };
-
-  const chunk = 300000;
-  const startText = await readSlice(0, Math.min(chunk, file.size));
-  const middleStart = Math.max(0, Math.floor(file.size / 2) - Math.floor(chunk / 2));
-  const midText = await readSlice(middleStart, Math.min(file.size, middleStart + chunk));
-  const endStart = Math.max(0, file.size - chunk);
-  const endText = await readSlice(endStart, file.size);
-
-  const merged = `${startText}
-${midText}
-${endText}`;
-  const lines = merged.split(/\r?\n/).filter(Boolean);
-  const sampleLines = lines.slice(0, 30).join('\n');
-  csvReference = `CSV: ${file.name}, ~${sizeMb}MB, sampled_rows:${lines.length}. Sample:
-${sampleLines.slice(0, 2400)}`;
-  updateBadge(`✓ CSV loaded (${sizeMb}MB sampled)`);
+async function loadCsvReference() {
+  updateBadge('CSV references are not used for rewriting. Using Reddit human-vs-AI corpus only.');
 }
 
-// ═══════════════════════════════════════════════════════
-//  COPY
-// ═══════════════════════════════════════════════════════
 function copyOut() {
   const out = document.getElementById('outputText').value;
   if (!out) return setStatus('Nothing to copy yet.', 'err');
@@ -1479,7 +1034,6 @@ function copyOut() {
   setTimeout(() => setStatus('Ready'), 2200);
 }
 
-// Ensure inline onclick handlers work across hosting environments.
 window.switchTab = switchTab;
 window.switchMethod = switchMethod;
 window.run = run;
@@ -1487,7 +1041,7 @@ window.copyOut = copyOut;
 window.saveFromSample = saveFromSample;
 window.saveFromQuiz = saveFromQuiz;
 window.clearStyle = clearStyle;
-
+window.loadCsvReference = loadCsvReference;
 </script>
 </body>
 </html>
