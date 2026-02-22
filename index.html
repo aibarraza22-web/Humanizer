@@ -656,46 +656,14 @@ select:focus{border-color:var(--accent)}
   <!-- ══════════ TAB: TIPS ══════════ -->
   <div id="tab-tips" class="panel">
     <div class="tips-grid">
-      <div class="tip">
-        <div class="tip-n">Tip 01</div>
-        <h3>Set your writing style first</h3>
-        <p>Paste a sample of your real writing before humanizing. Even 5 sentences from an email or text gives the AI enough to pick up your exact rhythm and vocabulary. It's the single biggest improvement you can make.</p>
-      </div>
-      <div class="tip">
-        <div class="tip-n">Tip 02</div>
-        <h3>Pick depth based on your draft</h3>
-        <p>Balanced mode is good for light clean-ups. Deep revision mode does more sentence-level work while preserving your facts and intent. Use it when the draft is vague, repetitive, or hard to follow.</p>
-      </div>
-      <div class="tip">
-        <div class="tip-n">Tip 03</div>
-        <h3>Make 2–3 edits yourself</h3>
-        <p>After humanizing, change 1–2 sentences to exactly how you'd say them. This injects genuinely unpredictable patterns that no AI rewriter can produce. Takes 30 seconds and makes a real difference.</p>
-      </div>
-      <div class="tip">
-        <div class="tip-n">Tip 04</div>
-        <h3>Split long texts</h3>
-        <p>For anything over 700 words, split into 2–3 sections and humanize each separately. The model focuses better on shorter chunks and the output quality is noticeably better on longer texts.</p>
-      </div>
-      <div class="tip">
-        <div class="tip-n">Tip 05</div>
-        <h3>Run a second pass when needed</h3>
-        <p>Revise → copy output → paste it back → run on Subtle mode. The second pass can tighten transitions and remove leftover wordiness without changing your core message.</p>
-      </div>
-      <div class="tip">
-        <div class="tip-n">Tip 06</div>
-        <h3>Check rhythm and specificity metrics</h3>
-        <p>After revising you'll see edit ratio, specificity, repetition, sentence-length variance, and voice similarity. If specificity drops or voice similarity falls, revise again.</p>
-      </div>
-      <div class="tip">
-        <div class="tip-n">Tip 07</div>
-        <h3>How the datasets work</h3>
-        <p>Every run can use optional reference examples to improve clarity and specificity checks. These references are guardrails for quality, not a target style to imitate.</p>
-      </div>
-      <div class="tip">
-        <div class="tip-n">Tip 08</div>
-        <h3>Quiz answers are hard rules</h3>
-        <p>When you answer the style quiz, your answers become absolute rules enforced separately from the rewrite instructions. If you said never use "And" to start a sentence, that gets checked against every sentence in the output before it's returned.</p>
-      </div>
+      <div class="tip"><div class="tip-n">Tip 01</div><h3>Set your writing style first</h3><p>Paste a sample of your real writing before humanizing. Even 5 sentences from an email picks up your rhythm. Single biggest improvement you can make.</p></div>
+      <div class="tip"><div class="tip-n">Tip 02</div><h3>Max mode targets detectors</h3><p>Max mode rebuilds sentence structure, injects fragments, forces specific word substitutions, and adds deliberate imperfections. Balanced mode is for when you need less change.</p></div>
+      <div class="tip"><div class="tip-n">Tip 03</div><h3>Make 2–3 edits yourself</h3><p>After humanizing, change 1–2 sentences to exactly how you'd write them. Genuinely unpredictable patterns no AI can produce. Takes 30 seconds.</p></div>
+      <div class="tip"><div class="tip-n">Tip 04</div><h3>Split long texts</h3><p>Over 700 words? Split into sections and humanize each one separately. Quality drops noticeably on longer chunks.</p></div>
+      <div class="tip"><div class="tip-n">Tip 05</div><h3>Run it twice</h3><p>Humanize → copy → paste back → run on Subtle mode. Two passes creates layered variation that's hard to fingerprint as any known humanizer pattern.</p></div>
+      <div class="tip"><div class="tip-n">Tip 06</div><h3>Burstiness score</h3><p>Human writing scores 0.5+. Below 0.4 means sentence lengths are still too uniform — the #1 detection signal on both Turnitin and GPTZero. Run again if you see red.</p></div>
+      <div class="tip"><div class="tip-n">Tip 07</div><h3>Datasets = reversed GPTZero</h3><p>Every run pulls fresh Reddit writing via JSON API, builds AI lookalikes from those exact topics, and compares both in the prompt so the model follows real human patterns instead of static canned samples.</p></div>
+      <div class="tip"><div class="tip-n">Tip 08</div><h3>Fragment injection</h3><p>The scrubber injects deliberately incomplete sentences — fragments. Real humans write fragments constantly. AI almost never does. Each fragment is a perplexity spike that detectors read as human.</p></div>
     </div>
   </div>
 
@@ -704,7 +672,16 @@ select:focus{border-color:var(--accent)}
 <script>
 'use strict';
 
-// ═══════════════════════════════════════════════════════
+// ════════════════════════════════════════
+//  SUPPORT DATA + RUNTIME CORPUS
+// ════════════════════════════════════════
+const SUBS = typeof FORCED_SUBSTITUTIONS !== 'undefined' ? FORCED_SUBSTITUTIONS : [];
+const FRAGS = typeof FRAGMENT_TEMPLATES !== 'undefined' ? FRAGMENT_TEMPLATES : [`Not the point.`, `Which is fine.`, `Worth knowing.`, `Hard to say.`, `Probably.`];
+const IMPERFS = typeof IMPERFECTION_RULES !== 'undefined' ? IMPERFECTION_RULES : [`Add one sentence that's under 5 words. Standalone.`, `Include one mild qualification like "I think" or "probably".`];
+
+let runtimeCorpusCache = null;
+
+// ════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════
 let styleProfile = null;
@@ -883,10 +860,89 @@ function shuffleSlice(arr, n) {
   return [...arr].sort(() => Math.random() - 0.5).slice(0, n);
 }
 
-// ═══════════════════════════════════════════════════════
-//  WORD COUNT
-// ═══════════════════════════════════════════════════════
-function wc(t) { return t.trim() ? t.trim().split(/\s+/).length : 0; }
+function normalizeParagraph(text) {
+  if (!text) return '';
+  const clean = text.replace(/\s+/g, ' ').trim();
+  return clean.length >= 120 ? clean : '';
+}
+
+async function fetchRedditJson(url) {
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!res.ok) throw new Error('Reddit request failed: ' + res.status);
+  return await res.json();
+}
+
+async function fetchRedditCorpus(limit = 24) {
+  const sources = [
+    'https://www.reddit.com/r/AskReddit/top.json?t=month&limit=40',
+    'https://www.reddit.com/r/CasualConversation/top.json?t=month&limit=40',
+    'https://www.reddit.com/r/TrueOffMyChest/top.json?t=month&limit=40',
+    'https://www.reddit.com/r/college/top.json?t=month&limit=40'
+  ];
+
+  const out = [];
+  for (const src of sources) {
+    try {
+      const json = await fetchRedditJson(src);
+      const posts = json?.data?.children || [];
+      for (const item of posts) {
+        const d = item?.data || {};
+        const body = normalizeParagraph(d.selftext || d.title || '');
+        if (body) out.push(body);
+        if (out.length >= limit) return out;
+      }
+    } catch (e) {
+      console.warn('Reddit source skipped:', src, e.message);
+    }
+  }
+  return out;
+}
+
+function buildContrastPairs(human, ai, count = 4) {
+  const max = Math.min(count, human.length, ai.length);
+  const pairs = [];
+  for (let i = 0; i < max; i++) {
+    const topicWords = (human[i].split(/\s+/).slice(0, 6).join(' ') || 'reddit writing sample').replace(/[.!,;:?]+$/g, '');
+    pairs.push({ topic: topicWords, human: human[i], ai: ai[i] });
+  }
+  return pairs;
+}
+
+async function synthesizeAiCorpus(apiKey, humanExamples) {
+  const list = humanExamples.map((h, i) => `${i + 1}. ${h}`).join('\n\n');
+  const system = `You generate benchmark AI-style paragraphs for detector contrast testing.
+Return ONLY valid JSON with this shape: {"ai":["...", "..."]}.
+Rules:
+- Create exactly ${humanExamples.length} paragraphs.
+- Paragraph i should be about the same topic as human example i.
+- Intentionally use common LLM phrasing patterns (clean transitions, formal topic sentences, predictable wording).
+- Keep each paragraph 90-160 words.`;
+  const raw = await callGroq(apiKey, system, `Human examples:
+
+${list}`, 0.35, 2200);
+  try {
+    const parsed = JSON.parse(raw);
+    const ai = Array.isArray(parsed.ai) ? parsed.ai.map(t => t.trim()).filter(Boolean) : [];
+    if (ai.length >= humanExamples.length) return ai.slice(0, humanExamples.length);
+    throw new Error('Invalid AI corpus length');
+  } catch (e) {
+    throw new Error('Could not build AI comparison corpus from Reddit topics.');
+  }
+}
+
+async function getRuntimeCorpus(apiKey) {
+  if (runtimeCorpusCache) return runtimeCorpusCache;
+
+  const human = await fetchRedditCorpus(24);
+  if (human.length < 8) throw new Error('Could not fetch enough Reddit writing samples right now. Try again in a minute.');
+
+  const pickedHuman = shuffleSlice(human, 8);
+  const ai = await synthesizeAiCorpus(apiKey, pickedHuman);
+  const contrasts = buildContrastPairs(pickedHuman, ai, 4);
+
+  runtimeCorpusCache = { human: pickedHuman, ai, contrasts };
+  return runtimeCorpusCache;
+}
 
 document.getElementById('inputText').addEventListener('input', () => {
   document.getElementById('inWC').textContent = wc(document.getElementById('inputText').value) + ' words';
@@ -1136,9 +1192,11 @@ function splitSentences(text) {
   return (text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text]).map(s => s.trim()).filter(Boolean);
 }
 
-function extractNamedEntities(text) {
-  return (text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) || []).filter(w => w.length > 2);
-}
+// ════════════════════════════════════════
+//  CALL 2 — REWRITER
+// ════════════════════════════════════════
+async function rewriteText(apiKey, inputText, strength, styleExamples, runtime) {
+  const wordTarget = wc(inputText);
 
 function buildVoiceProfile(sample, examples = []) {
   const base = `${sample || ''} ${examples.join(' ')}`.trim();
@@ -1179,28 +1237,12 @@ function computeMetrics(original, revised, voiceProfile) {
     concreteHints: (revised.match(/\b(example|for instance|for example|specifically|because|works by|instead of)\b/gi) || []).length
   };
 
-  const revisedSentences = splitSentences(revised);
-  const starters = revisedSentences.map(st => (st.split(/\s+/)[0] || '').toLowerCase()).filter(Boolean);
-  const starterMap = new Map();
-  starters.forEach(st => starterMap.set(st, (starterMap.get(st) || 0) + 1));
-  const repetitionScore = Array.from(starterMap.values()).filter(v => v > 1).reduce((a, b) => a + b, 0);
+  const runtime = await getRuntimeCorpus(apiKey);
+  const humanSample = runtime.human;
+  const aiSample = runtime.ai;
+  const contrastSample = runtime.contrasts;
 
-  const lengths = revisedSentences.map(st => wc(st)).filter(Boolean);
-  const avg = lengths.length ? lengths.reduce((a, b) => a + b, 0) / lengths.length : 0;
-  const variance = lengths.length ? lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length : 0;
-  const sentenceLengthVariance = avg ? Math.sqrt(variance) / avg : 0;
-
-  let voiceSimilarity = null;
-  if (voiceProfile && voiceProfile.avgSentenceLength) {
-    const lenScore = 1 - Math.min(1, Math.abs(avg - voiceProfile.avgSentenceLength) / Math.max(1, voiceProfile.avgSentenceLength));
-    const shortCount = lengths.filter(l => l < 8).length;
-    const longCount = lengths.filter(l => l > 22).length;
-    const mixScore = 1 - Math.min(1, Math.abs((shortCount + longCount) - (voiceProfile.sentenceMix.short + voiceProfile.sentenceMix.long)) / Math.max(1, voiceProfile.sentenceMix.total || 1));
-    voiceSimilarity = Number(((lenScore * 0.7) + (mixScore * 0.3)).toFixed(3));
-  }
-
-  return { editRatio: Number(editRatio.toFixed(3)), specificityMarkers, repetitionScore, sentenceLengthVariance: Number(sentenceLengthVariance.toFixed(3)), vagueCount, voiceSimilarity };
-}
+  const datasetBlock = `\n\n━━ REAL HUMAN WRITING (live Reddit JSON samples, 8 shown this run) — write like this ━━\nThese are pulled from real Reddit users. Follow their unpredictability, directness, and uneven rhythm:\n\n${humanSample.map((p, i) => `[Human example ${i + 1}]\n${p}`).join('\n\n')}\n\n━━ AI LOOKALIKE WRITING (generated on same topics, 8 shown this run) — NEVER write like this ━━\nThese were generated to mimic standard AI tendencies. Your output must avoid this structure and tone:\n\n${aiSample.map((p, i) => `[AI example ${i + 1}]\n${p}`).join('\n\n')}\n\n━━ SAME-TOPIC CONTRASTS (Reddit human vs AI lookalike, 4 shown this run) ━━\nInternalize the exact difference and stay on the HUMAN side sentence-by-sentence:\n\n${contrastSample.map(c => `[Topic seed: ${c.topic}]\n▸ HUMAN: ${c.human}\n▸ AI: ${c.ai}`).join('\n\n')}`;
 
 async function diagnoseDraft(apiKey, inputText) {
   const system = `You are a revision diagnostician. No rewriting. Return strict JSON with keys: summary, must_preserve (array), problems (array of tags).
@@ -1277,10 +1319,42 @@ OUTPUT RULE:
 ${inputText}`, strength === 'aggressive' ? 0.65 : strength === 'standard' ? 0.55 : 0.45, 3000);
 }
 
-async function verifyAndCorrect(apiKey, original, candidate, diagnosis, voiceProfile, styleExamples, mode='light') {
-  const originalMetrics = computeMetrics(original, original, voiceProfile);
-  let current = candidate;
-  let metrics = computeMetrics(original, current, voiceProfile);
+async function alignToCorpus(apiKey, text, runtime, wordTarget) {
+  const human = runtime.human.slice(0, 10);
+  const ai = runtime.ai.slice(0, 10);
+  const system = `You are a strict style calibrator.
+Goal: Make the candidate text much closer to HUMAN references and far from AI references.
+
+Return ONLY the revised text.
+Rules:
+- Preserve the exact original meaning.
+- Keep within 10% of ${wordTarget} words.
+- Borrow only STYLE signals from HUMAN references (rhythm, sentence openings, directness, imperfections).
+- Explicitly avoid AI reference patterns (predictable transitions, formal topic-sentence cadence, repetitive structure).
+- Make enough edits that the style shift is obvious.`;
+
+  const prompt = `CANDIDATE TEXT:
+${text}
+
+HUMAN REFERENCES:
+${human.map((h, i) => `${i + 1}. ${h}`).join('\n\n')}
+
+AI REFERENCES:
+${ai.map((a, i) => `${i + 1}. ${a}`).join('\n\n')}`;
+  return await callGroq(apiKey, system, prompt, 0.72);
+}
+
+// ════════════════════════════════════════
+//  CALL 3 — SCRUBBER
+//  Analyzes the actual rewrite output and
+//  gives surgical instructions targeted to
+//  what's specifically wrong with THIS text
+// ════════════════════════════════════════
+async function scrubText(apiKey, text) {
+  const burst = calcBurstiness(text);
+  const needsBurst = burst < 0.48;
+  const fragCount = countFragments(text);
+  const needsFrags = fragCount < 2;
 
   const specificityCurrent = metrics.specificityMarkers.numbers + metrics.specificityMarkers.namedEntities + metrics.specificityMarkers.concreteHints;
   const specificityOriginal = originalMetrics.specificityMarkers.numbers + originalMetrics.specificityMarkers.namedEntities + originalMetrics.specificityMarkers.concreteHints;
@@ -1343,13 +1417,14 @@ async function run() {
   if (wc(inputText) > 1400) return setStatus('Text is too long — split into chunks under 1400 words for best results.', 'err');
 
   btn.disabled = true;
+  runtimeCorpusCache = null;
   document.getElementById('scoreRow').style.display = 'none';
   document.getElementById('outputText').value = '';
   document.getElementById('outWC').textContent = '0 words';
 
   startProg();
   setStep(1);
-  setStatus('Stage A — Diagnosing draft...', 'working');
+  setStatus('Pass 1 — Building live Reddit corpus + rewriting...', 'working');
 
   try {
     let styleExamples = styleProfile?.examples || null;
@@ -1365,24 +1440,18 @@ async function run() {
       } catch (e) {}
     }
 
-    const voiceProfile = styleProfile?.raw || (styleExamples && styleExamples.length)
-      ? buildVoiceProfile(styleProfile?.raw || '', styleExamples || [])
-      : null;
-
-    const diagnosis = await diagnoseDraft(apiKey, inputText);
-    setProg(35);
+    const runtime = await getRuntimeCorpus(apiKey, inputText);
+    setStatus('Pass 1 — Rewriting against topic-matched human/AI corpus...', 'working');
+    const rewritten = await rewriteText(apiKey, inputText, strength, styleExamples, runtime);
+    setProg(50);
 
     setStep(2);
-    setStatus('Stage B — Targeted edit...', 'working');
-    const edited = await rewriteText(apiKey, inputText, strength, styleExamples, diagnosis, voiceProfile);
-    setProg(70);
+    setStatus('Pass 2 — Aligning draft closer to HUMAN corpus and away from AI corpus...', 'working');
+    const aligned = await alignToCorpus(apiKey, rewritten, runtime, wc(inputText));
+    setProg(78);
 
-    setStep(3);
-    setStatus('Stage C — Verify + self-correct...', 'working');
-    const mode = strength === 'subtle' ? 'light' : 'full';
-    const verification = await verifyAndCorrect(apiKey, inputText, edited, diagnosis, voiceProfile, styleExamples, mode);
-    const final = verification.text;
-    const metrics = verification.metrics;
+    setStatus('Pass 2b — Surgical scrub: fragments + perplexity + burstiness...', 'working');
+    const final = await scrubText(apiKey, aligned);
     setProg(96);
 
     endProg();
@@ -1540,6 +1609,16 @@ function copyOut() {
   setStatus('Copied to clipboard.', 'ok');
   setTimeout(() => setStatus('Ready'), 2200);
 }
+
+// Ensure inline onclick handlers work across hosting environments.
+window.switchTab = switchTab;
+window.switchMethod = switchMethod;
+window.run = run;
+window.copyOut = copyOut;
+window.saveFromSample = saveFromSample;
+window.saveFromQuiz = saveFromQuiz;
+window.clearStyle = clearStyle;
+
 </script>
 </body>
 </html>
