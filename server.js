@@ -58,11 +58,11 @@ app.post('/extract-style', async (req, res) => {
 
   try {
     const { default: fetch } = await import('node-fetch');
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'mistral-small-latest',
         messages: [
           {
             role: 'system',
