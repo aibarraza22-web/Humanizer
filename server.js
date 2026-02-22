@@ -1,12 +1,9 @@
-// ═══════════════════════════════════════════════════════════════════
-//  server.js — Express server
-//  Serves the UI and proxies pipeline calls (solves CORS for Reddit)
-// ═══════════════════════════════════════════════════════════════════
+// server.js — Humanizer v12
 import express from 'express';
 import cors from 'cors';
 import { humanize, answerAsAiden } from './pipeline.js';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -15,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
-// Serve static files with no-cache for HTML
+// Serve static files — no cache on HTML
 app.use(express.static(__dirname, {
   etag: false,
   lastModified: false,
@@ -26,13 +23,12 @@ app.use(express.static(__dirname, {
   }
 }));
 
-// Explicit root — always serves latest index.html
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.sendFile(__dirname + '/index.html');
 });
 
-// ─── Humanize endpoint ────────────────────────────────────────────────────────
+// ─── /humanize ────────────────────────────────────────────────────────────────
 app.post('/humanize', async (req, res) => {
   const { apiKey, text, strength, styleProfile } = req.body;
   if (!apiKey) return res.status(400).json({ error: 'Missing API key' });
@@ -43,14 +39,11 @@ app.post('/humanize', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const send = data => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
   try {
     const result = await humanize(
-      apiKey,
-      text,
-      strength || 'aggressive',
-      styleProfile || null,
+      apiKey, text, strength || 'aggressive', styleProfile || null,
       ({ step, msg }) => send({ type: 'progress', step, msg })
     );
     send({ type: 'result', text: result.text, scores: result.scores });
@@ -60,7 +53,7 @@ app.post('/humanize', async (req, res) => {
   res.end();
 });
 
-// ─── Answer as Me endpoint ────────────────────────────────────────────────────
+// ─── /answer ──────────────────────────────────────────────────────────────────
 app.post('/answer', async (req, res) => {
   const { apiKey, question, styleProfile } = req.body;
   if (!apiKey) return res.status(400).json({ error: 'Missing API key' });
@@ -71,13 +64,11 @@ app.post('/answer', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const send = data => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
   try {
     const result = await answerAsAiden(
-      apiKey,
-      question,
-      styleProfile || null,
+      apiKey, question, styleProfile || null,
       ({ step, msg }) => send({ type: 'progress', step, msg })
     );
     send({ type: 'result', text: result.text, scores: result.scores });
@@ -87,7 +78,7 @@ app.post('/answer', async (req, res) => {
   res.end();
 });
 
-// ─── Style extraction endpoint ────────────────────────────────────────────────
+// ─── /extract-style ───────────────────────────────────────────────────────────
 app.post('/extract-style', async (req, res) => {
   const { apiKey, sample } = req.body;
   if (!apiKey || !sample) return res.status(400).json({ error: 'Missing fields' });
@@ -127,6 +118,5 @@ app.post('/extract-style', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  Humanizer v8 running at http://localhost:${PORT}`);
-  console.log(`  Open that URL in your browser.\n`);
+  console.log(`\n  Humanizer v12 running at http://localhost:${PORT}\n`);
 });
