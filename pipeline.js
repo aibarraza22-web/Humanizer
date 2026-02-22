@@ -290,41 +290,53 @@ OUTPUT: Return ONLY the rewritten text.`,
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  PASS 4: Inject life using HuggingFace sentences
+//  PASS 4: Inject real specific examples that make text feel alive
 // ═══════════════════════════════════════════════════════════════════
-// The HuggingFace dataset has real NYT journalism — specific names,
-// numbers, places, moments. These are injected as anchoring examples
-// that make abstract points feel real and grounded.
-// This is NOT style imitation — it's specificity injection.
+// Adds 1-2 real world specific examples (companies, people, events)
+// that support the argument already being made.
+// Word count is controlled: for every sentence added, shorten something
+// else. Net change must be zero.
+// Framing must be Aiden-style — casual and direct, not journalistic.
 async function pass4_injectLife(apiKey, text, hfSentences, originalWordCount) {
-  if (hfSentences.length < 10) return text;
-
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
 
-  // Pick a diverse sample of HF sentences with real specific details
-  const sample = shuffle(hfSentences).slice(0, 20);
+  // Use HF sentences only as a signal for what real specifics exist —
+  // not as content to copy. The model should use its own knowledge
+  // of real companies/events relevant to the topic.
+  const hfSignal = hfSentences.length > 0
+    ? `\nFor reference, here are real human sentences with specific details (style only — do not copy content):\n` +
+      shuffle(hfSentences).slice(0, 8).map((s,i) => `${i+1}. "${s}"`).join('\n')
+    : '';
 
   const result = await mistral(apiKey,
-    `You are making this text feel more alive and personal by grounding abstract points in specific reality.
+    `You are adding 1-2 real specific examples to make this text feel grounded and alive.
 
-REAL SPECIFIC DETAILS FROM HUMAN WRITING (use these as inspiration, not word-for-word):
-${sample.map((s,i) => `${i+1}. "${s}"`).join('\n')}
+WHAT TO DO:
+1. Read the argument the text is making
+2. Find 1-2 places where a real specific example would strengthen the point
+3. Add a brief real-world example — a real company, a real person, a real event that actually supports what's being said
+4. Frame it the way Aiden would: casual, direct, first-person reaction — NOT like a journalist reporting facts
 
-TASK:
-Find 2-3 sentences in the text that are abstract or general. For each one:
-1. Keep the same argument and meaning
-2. Make it more specific — add a concrete detail, a real number, a comparison to something tangible, or frame it as a personal observation ("I've seen this happen", "This is exactly why", "Look at what happened when")
-3. Keep the sentence SHORT (under 20 words)
+AIDEN'S STYLE FOR EXAMPLES:
+• "Take Renaissance Technologies — their AI fund has been making insane returns for decades."
+• "Look at what JPMorgan did with their AI trading desk. They basically replaced analysts with algorithms."
+• NOT: "Renaissance Technologies, founded in 1982, employs quantitative models to..."
 
-DO NOT:
-• Change the argument or add new ideas
-• Make the text longer (must stay ${minWords}–${maxWords} words)
-• Use any sentence from the list word-for-word
-• Change sentences that are already specific and grounded
+STRICT WORD COUNT RULE:
+Current: ${wc(text)} words. Target: ${minWords}–${maxWords} words.
+For every new sentence you add, you MUST shorten or cut something elsewhere.
+The total output must be within the target range. This is non-negotiable.
 
-Output ONLY the updated text with 2-3 sentences made more specific.`,
-    text, 0.72, 3000);
+ONLY add examples that:
+• Are genuinely real and accurate (real companies, real events)
+• Directly support the specific point being made
+• Can be stated in 1-2 short sentences max
+• You are confident are true — if unsure, skip it
+${hfSignal}
+
+Output ONLY the updated text.`,
+    text, 0.75, 3000);
 
   return await hardTrim(apiKey, result, originalWordCount);
 }
