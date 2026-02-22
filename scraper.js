@@ -13,7 +13,7 @@ const HEADERS = { 'User-Agent': UA, 'Accept': 'application/json' };
 async function fetchRedditSearch(query, limit = 15) {
   const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&sort=relevance&type=link&limit=${limit}&restrict_sr=false`;
   try {
-    const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { headers: HEADERS, signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 8000); return c.signal; })() });
     if (!res.ok) {
       console.log(`  → Reddit search returned ${res.status} — likely blocked`);
       return [];
@@ -40,7 +40,7 @@ async function fetchRedditSearch(query, limit = 15) {
 async function fetchSubredditPosts(subreddit, sort = 'top', limit = 10) {
   const url = `https://www.reddit.com/r/${subreddit}/${sort}.json?limit=${limit}&t=year`;
   try {
-    const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { headers: HEADERS, signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 8000); return c.signal; })() });
     if (!res.ok) return [];
     const data = await res.json();
     const posts = data?.data?.children || [];
@@ -61,7 +61,7 @@ async function fetchSubredditPosts(subreddit, sort = 'top', limit = 10) {
 async function fetchRedditComments(postUrl, limit = 20) {
   try {
     const jsonUrl = postUrl.replace('https://reddit.com', 'https://www.reddit.com') + '.json?limit=' + limit;
-    const res = await fetch(jsonUrl, { headers: HEADERS, signal: AbortSignal.timeout(8000) });
+    const res = await fetch(jsonUrl, { headers: HEADERS, signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 8000); return c.signal; })() });
     if (!res.ok) return [];
     const data = await res.json();
     const comments = data?.[1]?.data?.children || [];
@@ -83,7 +83,7 @@ async function fetchPushshift(query, limit = 20) {
   const url = `https://api.pullpush.io/reddit/search/submission/?q=${encodeURIComponent(query)}&size=${limit}&is_self=true`;
   try {
     console.log(`  → Trying Pushshift/PullPush fallback...`);
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) });
+    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 10000); return c.signal; })() });
     if (!res.ok) {
       console.log(`  → Pushshift returned ${res.status}`);
       return [];
@@ -110,7 +110,7 @@ async function fetchPushshift(query, limit = 20) {
 async function fetchPushshiftComments(query, limit = 20) {
   const url = `https://api.pullpush.io/reddit/search/comment/?q=${encodeURIComponent(query)}&size=${limit}`;
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) });
+    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 10000); return c.signal; })() });
     if (!res.ok) return [];
     const data = await res.json();
     const comments = data?.data || [];
