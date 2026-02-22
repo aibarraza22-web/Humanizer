@@ -1,8 +1,8 @@
-// pipeline.js — Humanizer v13
-// Architecture: load examples → analyze → initial rewrite → 3 fix rounds (always all run) → word count fix
-// Round 1: fix detectable problems (long sentences, dramatic phrases, banned words, em dashes)
-// Round 2: ALWAYS runs — break up essay structure, merge paragraphs, improve flow
-// Round 3: ALWAYS runs — add burstiness, casual language, punchy short sentences
+// pipeline.js — Humanizer v14
+// Key addition: hardScrub() — regex-based post-processing that catches
+// AI-trying-to-sound-casual patterns before output leaves the pipeline.
+// These patterns (rhetorical questions, one-word sentences, "here's the twist" etc.)
+// are NOT caught by the LLM passes because the LLM invents them itself.
 
 import fetch from 'node-fetch';
 
@@ -37,7 +37,7 @@ const AIDEN_EXAMPLES = [
   }
 ];
 
-// ─── Proven human examples — concrete targets the model aims for ──────────────
+// ─── Proven human examples ────────────────────────────────────────────────────
 const HUMAN_EXAMPLE_86 = `Finance, startups, and AI are all coming together right now. In finance, AI can help predict markets and analyze lots of data a lot faster than any human ever could. Even more, startups are using AI to build financial tools all by themselves. Someone can now just create a trading model, or a budgeting app, or a risk engine that used to require a giant bank that used to take hundreds of people. That changes everything and now speed and creativity from one person mean so much more than hundreds of people used to. Although, AI does not do this on its own. It still needs the human to push it and manage it. When someone with real financial knowledge gets a hold of these new AI tools. They can be unstoppable, stronger than hundreds of employees just a few months ago. This is not about getting rid of people, but about giving ambitious startup founders the ability to build.`;
 
 const HUMAN_EXAMPLE_72 = `Currently, finance, startups, and AI are all coming together. This will reshape whole industries and create new opportunities for everyone. They are merging and being able to connect with each other. AI is changing finance because it can predict market trends all by itself. Also, it can see fraud in real-time, handle risk assessment, and go through lots of data faster than any human possibly could. Startups are using AI to build things that were once only possible for large corporations with tons of employees. Now, just one human can make advanced trading models and budgeting apps all by themselves by just using the help of AI. Speed and creativity are starting the matter more that just employees and company size. This allows startups to be able to adapt and outmaneuver larger and slower competitors. However, AI cannot do all this alone. You need a human, knowledgeable in finance, to properly manage the AI. This isn't about replacing anyone but about making all humans be able to build big things themselves. With the help of AI, the future can help us build whatever we want.`;
@@ -70,7 +70,7 @@ const DRAMATIC_PHRASES = [
   'levels the playing field','game changer','game-changer',
   'blending in transformative','creating new opportunities',
   'in transformative ways','redefining','cutting-edge','state-of-the-art',
-  'superpowers','they\'ve got superpowers','like they\'ve got'
+  'superpowers','outrun the big'
 ];
 
 const AI_OPENERS = [
@@ -84,6 +84,77 @@ const AI_OPENERS = [
   /^(Here'?s? (what|why|the|how))/i,
   /^(It is (clear|evident|apparent) that)\s/i,
 ];
+
+// ═══════════════════════════════════════════════════════════════════
+//  HARD SCRUB — regex-based, runs on every pass output
+//  Catches patterns the LLM invents when trying to sound casual.
+//  These are NOT caught by the LLM passes because the model generates them.
+//  No API call — pure string manipulation.
+// ═══════════════════════════════════════════════════════════════════
+function hardScrub(text) {
+  let t = text;
+
+  // ── Em dashes ──────────────────────────────────────────────────
+  // Replace — with period + capitalize next word
+  t = t.replace(/\s*—\s*/g, '. ');
+
+  // ── "Here's the X:" setup phrases ─────────────────────────────
+  // "Here's the real twist:" / "Here's the thing:" / "Here's the deal:"
+  t = t.replace(/here's the (real |)?(twist|thing|deal|catch|key|truth|problem|issue|point)[:\s]/gi, 'The thing is, ');
+  t = t.replace(/but here's (the |)(real |)?(twist|thing|deal|catch|key|truth)[:\s]/gi, 'But the thing is, ');
+
+  // ── Rhetorical questions followed by answer ────────────────────
+  // "The old barriers? Yeah, they're gone." → "The old barriers are pretty much gone."
+  // "Size? Doesn't matter." → "Size doesn't really matter."
+  t = t.replace(/([A-Z][^.!?]{2,30})\?\s+(Yeah,?\s+)?(they're|it's|that's|he's|she's|we're|they are|it is)/gi,
+    (match, subject, yeah, verb) => `${subject} ${verb}`);
+  t = t.replace(/([A-Z][^.!?]{2,30})\?\s+(Yeah,?\s+)?/gi, (match, subject) => `${subject}. `);
+
+  // ── One-word or two-word dramatic sentences ────────────────────
+  // "Unstoppable." / "Remarkable." / "Game-changing." / "Period."
+  const dramaticOneWordSentences = [
+    'Unstoppable', 'Remarkable', 'Extraordinary', 'Revolutionary', 'Transformative',
+    'Unprecedented', 'Incredible', 'Unbelievable', 'Fascinating', 'Stunning',
+    'Period', 'Full stop', 'Simple as that', 'End of story', 'Case closed',
+    'Mind-blowing', 'Mind blowing', 'Game-changing', 'Game changing',
+    'That simple', 'That easy', 'That big'
+  ];
+  for (const word of dramaticOneWordSentences) {
+    // Match as standalone sentence (preceded by period/newline, followed by period/newline)
+    const pattern = new RegExp(`(\\.|\\n|^)\\s*${word}\\.\\s*`, 'gi');
+    t = t.replace(pattern, (match, pre) => `${pre} `);
+  }
+
+  // ── "Now?" / "Why?" / rhetorical one-word questions ───────────
+  t = t.replace(/\b(Now|Why|How|What|When|Where)\?\s+/g, '');
+
+  // ── Colon setups ───────────────────────────────────────────────
+  // "But here's what's changed: startups..." → "But startups..."
+  t = t.replace(/[Bb]ut here's what('s| has) changed:\s*/g, 'But ');
+  t = t.replace(/[Tt]he real (reason|answer|point|difference|advantage) (is|here) is:\s*/g, 'The real point is ');
+  t = t.replace(/[Hh]ere's why:\s*/g, 'Because ');
+  t = t.replace(/[Hh]ere's how:\s*/g, '');
+  t = t.replace(/[Tt]he (bottom line|key takeaway|main point):\s*/g, 'The main point is ');
+
+  // ── "Not X. Y." dramatic contrast sentences ───────────────────
+  // "Not replacing people. Empowering them." → "It's not about replacing people, it's about empowering them."
+  t = t.replace(/\bNot (replacing|removing|eliminating|cutting|reducing)\s+([^.]+)\.\s+([A-Z][^.]+ing)\s+them\./g,
+    "It's not about $1 $2. It's about $3 them.");
+
+  // ── Trailing dramatic closers ──────────────────────────────────
+  t = t.replace(/\b(The barriers are gone|The old barriers\?[^.]*)\./gi, 'The barriers are a lot lower now.');
+  t = t.replace(/\bThe (old |)(rules|game|world|landscape) (has |have |)(changed|shifted)\./gi, 'Things have changed a lot.');
+
+  // ── Clean up double spaces and double periods from replacements ─
+  t = t.replace(/\.\.+/g, '.');
+  t = t.replace(/\s{2,}/g, ' ');
+  t = t.replace(/\.\s*\./g, '.');
+
+  // ── Capitalize first letter after period if lowercased ─────────
+  t = t.replace(/\.\s+([a-z])/g, (m, c) => `. ${c.toUpperCase()}`);
+
+  return t.trim();
+}
 
 // ─── Mistral API ──────────────────────────────────────────────────────────────
 async function mistral(apiKey, system, user, temp = 0.85, maxTokens = 2048) {
@@ -157,7 +228,6 @@ function detectInputType(text) {
   return analysis > opinion + 2 ? 'analysis' : 'opinion';
 }
 
-// Detect specific AI problems — used for round 1 only
 function detectProblems(text) {
   const sentences = getSentences(text);
   const longSentences = sentences.filter(s => s.split(/\s+/).length > 17);
@@ -166,8 +236,8 @@ function detectProblems(text) {
   const banned = countBanned(text);
   const aiOpeners = countAIOpeners(text);
   const burst = calcBurstiness(text);
-
   const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 0);
+
   const structuredParaPatterns = [
     /^(AI is|Finance is|Startups are|The future|This shift|This democratizes|This allows|This enables)/i,
     /^[A-Z][^.!?]+(revolutionizing|reshaping|transforming|enabling|empowering)/i,
@@ -179,14 +249,9 @@ function detectProblems(text) {
   }).length;
 
   const score =
-    longSentences.length * 4 +
-    dramatic.length * 5 +
-    banned.length * 3 +
-    aiOpeners.length * 3 +
-    (hasEmDash ? 6 : 0) +
-    (burst < 0.35 ? 8 : 0) +
-    structuredParas * 4 +
-    (paragraphs.length >= 5 ? 5 : 0);
+    longSentences.length * 4 + dramatic.length * 5 + banned.length * 3 +
+    aiOpeners.length * 3 + (hasEmDash ? 6 : 0) + (burst < 0.35 ? 8 : 0) +
+    structuredParas * 4 + (paragraphs.length >= 5 ? 5 : 0);
 
   return { longSentences, dramatic, banned, aiOpeners, hasEmDash, burst, structuredParas, paragraphs, score };
 }
@@ -243,7 +308,7 @@ Use "I" and "we" naturally. Say what you actually think, directly.`;
   const system = `You are rewriting text to pass GPTZero AI detection. Your output must look like it was typed by a real student.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TWO REAL OUTPUTS THAT PASSED GPTZERO — WRITE LIKE THESE
+TWO REAL OUTPUTS THAT PASSED GPTZERO — WRITE EXACTLY LIKE THESE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 EXAMPLE 1 — scored 86% human:
@@ -256,16 +321,16 @@ WHY THESE PASS:
 • Short sentences — most are 8–14 words
 • Casual imperfect phrases: "lots of", "all by themselves", "tons of", "way faster", "by just using"
 • Slightly off grammar is fine — real people write this way
-• Flows as one stream of thought — NOT 4 clean organized paragraphs with topic sentences
-• Short punchy sentences mixed in: "That changes everything." / "Anyone can do this now."
-• No dramatic closings about "the future" or "superpowers"
+• Flows as one stream of thought — NOT organized paragraphs with topic sentences
+• Short punchy statements mixed in: "That changes everything." / "Anyone can do this now."
 
-WHAT 100% AI DETECTION LOOKS LIKE — NEVER WRITE LIKE THIS:
-"Finance, startups, and AI are blending in transformative ways. This fusion is reshaping industries."
-→ FAILS: "transformative ways" "reshaping industries" = journalist phrases. Clean topic sentence = essay.
-
-"When someone who really gets finance uses these AI tools, it's like they've got superpowers."
-→ FAILS: "superpowers" = dramatic AI phrase. Too polished.
+WHAT STILL GETS DETECTED EVEN WHEN "CASUAL" — DO NOT WRITE LIKE THIS:
+"But here's the real twist: startups are using it..." → DETECTED. "Here's the X:" is an AI setup phrase.
+"Unstoppable." as a standalone sentence → DETECTED. One-word dramatic sentences = AI.
+"The old barriers? Yeah, they're pretty much gone." → DETECTED. Rhetorical question + yeah = AI.
+"It's not about replacing people. Empowering them." → DETECTED. Dramatic two-part contrast = AI.
+"Size doesn't matter as much anymore—speed and creativity matter way more" → DETECTED. Em dash mid-sentence = AI.
+"That's why startups can outrun the big, slow companies." → DETECTED. "outrun" = dramatic.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MORE REAL HUMAN VOICE EXAMPLES
@@ -276,114 +341,90 @@ ${allAidenText}
 ABSOLUTE RULES — BREAK ANY = AI DETECTION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. NO SENTENCE OVER 18 WORDS. Count every sentence. Split anything longer.
-2. NO EM DASHES (—). Never. Not once.
-3. NO COLON LISTS. Never use : to introduce items.
-4. NO DRAMATIC PHRASES. Replace: "transformative" → "big", "revolutionizing" → "changing", "remarkable" → "really good", "reshaping" → "changing", "unprecedented" → "huge", "innovative" → "new", "cutting-edge" → "new", "superpowers" → "a huge advantage"
-5. NO STRUCTURED ESSAY PARAGRAPHS. Do not write 4 clean sections each starting with a topic sentence. Write like one flowing stream of thought.
-6. PLAIN CASUAL WORDS: "lots of" not "numerous", "way faster" not "significantly faster", "can't" not "cannot", "tons of" not "extensive", "now" not "currently", "used to" not "historically"
-7. WORD COUNT: output must be ${minWords}–${maxWords} words.
+1. NO SENTENCE OVER 18 WORDS.
+2. NO EM DASHES (—). Never. Replace with a period.
+3. NO COLON SETUPS. Never use "here's the thing:", "here's the twist:", "the real point:", etc.
+4. NO RHETORICAL QUESTIONS. Never write "The old barriers? Yeah..." or "Now?" or "Why?"
+5. NO ONE-WORD DRAMATIC SENTENCES. Never write "Unstoppable." or "Period." or "Remarkable." alone.
+6. NO DRAMATIC CONTRASTS. Never write "Not replacing people. Empowering them." style sentences.
+7. NO DRAMATIC PHRASES: "transformative" → "big", "revolutionizing" → "changing", "outrun" → "beat", "superpowers" → "a big advantage", "unprecedented" → "huge"
+8. NO STRUCTURED ESSAY PARAGRAPHS. Write as one flowing stream of thought.
+9. PLAIN CASUAL WORDS: "lots of" not "numerous", "way faster" not "significantly faster", "can't" not "cannot"
+10. WORD COUNT: output must be ${minWords}–${maxWords} words.
 
 ${extraGuidance}
 ${userStyleBlock}
 
 OUTPUT: Return ONLY the rewritten text. No intro, no explanation.`;
 
-  const result = await mistral(apiKey, system,
+  const raw = await mistral(apiKey, system,
     `Rewrite this text:\n\n${inputText}`,
     temps[strength || 'aggressive'], 3000);
 
-  return await enforceWordCount(apiKey, result, wordTarget);
+  const scrubbed = hardScrub(raw);
+  return await enforceWordCount(apiKey, scrubbed, wordTarget);
 }
 
 // ═══════════════════════════════════════════════════════════════════
 //  ROUND 1: Fix detectable problems
-//  Long sentences, dramatic phrases, banned words, em dashes
 // ═══════════════════════════════════════════════════════════════════
 async function round1_fixProblems(apiKey, text, originalWordCount) {
   const problems = detectProblems(text);
-
-  if (problems.score <= 2) {
-    return { text, skipped: true, score: problems.score };
-  }
+  if (problems.score <= 2) return { text, skipped: true };
 
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
   const fixList = [];
 
-  if (problems.hasEmDash) {
-    fixList.push(`EM DASHES: Replace every — with a period. Start a new sentence.`);
-  }
+  if (problems.hasEmDash) fixList.push(`EM DASHES: Replace every — with a period. Start a new sentence.`);
 
   if (problems.longSentences.length > 0) {
-    fixList.push(`LONG SENTENCES — split each into 2 shorter sentences (each under 14 words):
-${problems.longSentences.slice(0, 5).map(s => `  • "${s}"`).join('\n')}`);
+    fixList.push(`LONG SENTENCES — split each into 2 shorter sentences (each under 14 words):\n${problems.longSentences.slice(0, 5).map(s => `  • "${s}"`).join('\n')}`);
   }
 
   if (problems.dramatic.length > 0) {
-    const replacements = {
-      'transformative ways': 'big ways',
-      'reshaping industries': 'changing industries',
-      'revolutionizing': 'changing', 'revolutionize': 'change',
-      'remarkable accuracy': 'really good accuracy',
-      'fast-paced markets': 'fast markets',
-      'innovative tools': 'new tools', 'innovative approach': 'new approach',
-      'large corporations with extensive teams': 'big companies with lots of employees',
-      'democratizes': 'opens up for everyone', 'democratize': 'open up for everyone',
-      'drives innovation': 'helps people build new things',
-      'harness this synergy': 'use these tools together',
-      'the future belongs to': 'whoever does this will win',
-      'unlocks potential': 'helps people do more',
-      'silver bullet': 'magic fix',
-      'leave them in the dust': 'beat them',
-      'unprecedented scale': 'a huge scale',
-      'eerie precision': 'really good accuracy',
-      'levels the playing field': 'lets anyone compete',
-      'game changer': 'a big deal', 'game-changer': 'a big deal',
-      'redefining': 'changing', 'cutting-edge': 'new', 'state-of-the-art': 'the best',
-      'superpowers': 'a huge advantage',
-      "they've got superpowers": 'they have a huge advantage',
-      "like they've got": 'like they have',
+    const rep = {
+      'transformative ways':'big ways','reshaping industries':'changing industries',
+      'revolutionizing':'changing','revolutionize':'change',
+      'remarkable accuracy':'really good accuracy','fast-paced markets':'fast markets',
+      'innovative tools':'new tools','innovative approach':'new approach',
+      'large corporations with extensive teams':'big companies with lots of employees',
+      'democratizes':'opens up for everyone','democratize':'open up for everyone',
+      'drives innovation':'helps people build new things',
+      'harness this synergy':'use these tools together',
+      'the future belongs to':'whoever does this will win',
+      'unlocks potential':'helps people do more','silver bullet':'magic fix',
+      'leave them in the dust':'beat them','unprecedented scale':'a huge scale',
+      'eerie precision':'really good accuracy','levels the playing field':'lets anyone compete',
+      'game changer':'a big deal','game-changer':'a big deal',
+      'redefining':'changing','cutting-edge':'new','state-of-the-art':'the best',
+      'superpowers':'a big advantage','outrun the big':'beat the big',
     };
-    const lines = problems.dramatic.slice(0, 6).map(p => {
-      const fix = replacements[p.toLowerCase()] || 'a plain casual phrase';
-      return `  • "${p}" → "${fix}"`;
-    }).join('\n');
-    fixList.push(`DRAMATIC PHRASES — replace each:\n${lines}`);
+    fixList.push(`DRAMATIC PHRASES — replace each:\n${problems.dramatic.slice(0, 6).map(p => `  • "${p}" → "${rep[p.toLowerCase()] || 'a plain casual phrase'}"`).join('\n')}`);
   }
 
   if (problems.banned.length > 0) {
-    fixList.push(`BANNED AI WORDS — replace with plain casual words:
-${problems.banned.slice(0, 6).map(w => `  • "${w}"`).join('\n')}`);
+    fixList.push(`BANNED WORDS — replace with plain casual words:\n${problems.banned.slice(0, 6).map(w => `  • "${w}"`).join('\n')}`);
   }
 
   if (problems.aiOpeners.length > 0) {
-    fixList.push(`AI SENTENCE OPENERS — rewrite these to not start with AI filler:
-${problems.aiOpeners.slice(0, 4).map(s => `  • "${s.trim().slice(0, 80)}"`).join('\n')}`);
+    fixList.push(`AI OPENERS — rewrite these sentence starts:\n${problems.aiOpeners.slice(0, 4).map(s => `  • "${s.trim().slice(0, 80)}"`).join('\n')}`);
   }
 
-  if (fixList.length === 0) return { text, skipped: true, score: problems.score };
+  if (fixList.length === 0) return { text, skipped: true };
 
-  const result = await mistral(apiKey,
-    `Fix ONLY the specific problems listed below. Do not rewrite everything else.
-
-REFERENCE — write more like this:
-"${HUMAN_EXAMPLE_86}"
-
-WORD COUNT: Must stay ${minWords}–${maxWords} words (currently ${wc(text)} words).
-
-━━ FIX THESE SPECIFIC PROBLEMS ━━
-${fixList.join('\n\n')}
-
-Output ONLY the corrected text.`,
+  const raw = await mistral(apiKey,
+    `Fix ONLY the specific problems listed. Do not rewrite everything else.
+WORD COUNT: Must stay ${minWords}–${maxWords} words (currently ${wc(text)}).
+━━ FIX THESE ━━\n${fixList.join('\n\n')}\nOutput ONLY the corrected text.`,
     text, 0.55, 3000);
 
-  return { text: await enforceWordCount(apiKey, result, originalWordCount), skipped: false, score: detectProblems(result).score };
+  const scrubbed = hardScrub(raw);
+  return { text: await enforceWordCount(apiKey, scrubbed, originalWordCount), skipped: false };
 }
 
 // ═══════════════════════════════════════════════════════════════════
 //  ROUND 2: Break up essay structure — ALWAYS RUNS
-//  Merges paragraphs, rewrites topic sentences, improves flow
 // ═══════════════════════════════════════════════════════════════════
 async function round2_breakStructure(apiKey, text, originalWordCount) {
   const minWords = Math.floor(originalWordCount * 0.93);
@@ -395,62 +436,70 @@ async function round2_breakStructure(apiKey, text, originalWordCount) {
     return `  Para ${i + 1}: "${first.slice(0, 90)}"`;
   }).join('\n');
 
-  const result = await mistral(apiKey,
-    `The text below is still being detected as AI by GPTZero. The main remaining problem is that it reads like an organized essay — clean paragraph breaks and structured sentences.
+  const raw = await mistral(apiKey,
+    `The text below is still being detected as AI by GPTZero. The main problem is it reads like an organized essay.
 
-REFERENCE — this is what passing (86% human) looks like. Notice how it flows as one stream of thought, not separate organized sections:
+REFERENCE — this is what passing (86% human) looks like. One flowing stream, not sections:
 "${HUMAN_EXAMPLE_86}"
 
-ALSO REFERENCE — another passing example (72% human):
-"${HUMAN_EXAMPLE_72}"
+RULES FOR THIS PASS:
+• Do NOT use "here's the thing:", "here's the twist:", or any colon setups
+• Do NOT use em dashes (—)
+• Do NOT write rhetorical questions like "The barriers? Gone."
+• Do NOT write one-word dramatic sentences like "Unstoppable."
 
 YOUR JOB:
-1. Merge 2–3 of the paragraphs together so the text flows more naturally as one block
-2. Rewrite any paragraph opener that sounds like a formal topic sentence — make it casual
-3. Add connecting words between ideas to make it flow: "also", "and", "but", "so", "now", "plus"
-4. Keep all the same information and arguments — just change the structure and connectors
+1. Merge 2–3 paragraphs together so it flows as one stream of thought
+2. Rewrite formal topic sentence openers to be more casual
+3. Add connecting words: "also", "and", "but", "so", "now", "plus", "and also"
+4. Keep all the same information
 5. Word count must stay ${minWords}–${maxWords} words (currently ${wc(text)})
 
-Current paragraph openers to consider rewriting:
+Current paragraph openers:
 ${paraOpenings}
 
 Output ONLY the result.`,
     text, 0.65, 3000);
 
-  return await enforceWordCount(apiKey, result, originalWordCount);
+  const scrubbed = hardScrub(raw);
+  return await enforceWordCount(apiKey, scrubbed, originalWordCount);
 }
 
 // ═══════════════════════════════════════════════════════════════════
 //  ROUND 3: Add burstiness and casual language — ALWAYS RUNS
-//  Adds short punchy sentences, replaces polished words with casual ones
 // ═══════════════════════════════════════════════════════════════════
 async function round3_addBurstiness(apiKey, text, originalWordCount) {
   const minWords = Math.floor(originalWordCount * 0.93);
   const maxWords = Math.ceil(originalWordCount * 1.07);
   const burst = calcBurstiness(text);
 
-  const result = await mistral(apiKey,
-    `Final polish pass. This text needs to sound MORE like a real person talking and LESS like a well-written paragraph. GPTZero detects AI partly by uniform sentence rhythm and polished phrasing.
+  const raw = await mistral(apiKey,
+    `Final polish. This text needs to sound more like a real person talking.
 
-REFERENCE — these examples passed GPTZero. Study the rhythm — short sentences mixed with medium ones, casual imperfect phrasing:
+REFERENCE — these examples passed GPTZero:
 "${HUMAN_EXAMPLE_86}"
 
-"${HUMAN_EXAMPLE_72}"
+RULES FOR THIS PASS:
+• Do NOT use "here's the thing:", "here's the twist:", colons as setups
+• Do NOT use em dashes (—)
+• Do NOT write rhetorical questions
+• Do NOT write one-word dramatic sentences
+• Do NOT write dramatic contrasts like "Not replacing people. Empowering them."
 
 YOUR JOB:
-1. Add 2–3 SHORT punchy sentences (4–7 words) scattered through the text to break up the rhythm.
-   Examples: "That's a big deal." / "Anyone can do this now." / "That changes everything." / "It just works." / "That is the whole point." / "No one could do this before."
-2. Find 2–3 sentences that sound too smooth or polished — make them slightly more casual and imperfect
-   Example: "Speed and creativity matter more than just having a big team" → "Speed and creativity matter way more than just having lots of people"
-3. Replace any remaining formal words with casual ones: "however" → "but", "obtain" → "get", "individuals" → "people", "currently" → "now", "significant" → "big", "possess" → "have"
-4. If any sentence sounds like it could be in a magazine article — rewrite it to sound like someone talking to a friend
-5. Word count must stay ${minWords}–${maxWords} words (currently ${wc(text)})
-Current burstiness: ${burst} (target: above 0.45)
+1. Add 2–3 SHORT plain sentences (4–7 words) to break rhythm.
+   Good examples: "That changes everything." / "No one could do this before." / "Anyone can do this now." / "That is the whole point." / "It just makes sense."
+   BAD examples (too dramatic): "Unstoppable." / "Game over." / "Period."
+2. Find 2–3 smooth polished sentences and make them slightly more casual
+3. Replace formal words: "however" → "but", "obtain" → "get", "currently" → "now", "significant" → "big"
+4. Word count must stay ${minWords}–${maxWords} words (currently ${wc(text)})
+   Current burstiness: ${burst} (target: above 0.45)
 
 Output ONLY the result.`,
     text, 0.70, 3000);
 
-  return await enforceWordCount(apiKey, result, originalWordCount);
+  const scrubbed = hardScrub(raw);
+  return await enforceWordCount(apiKey, scrubbed, originalWordCount);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -491,44 +540,42 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
     log('2/7', `Analysis defaulting to: ${analysis.type}`);
   }
 
-  // Step 3: Initial rewrite
+  // Step 3: Initial rewrite + hard scrub
   log('3/7', `Rewriting in human voice (${analysis.type} mode)...`);
   let result;
   try {
     result = await initialRewrite(apiKey, inputText, analysis.type, strength || 'aggressive', styleProfile);
     const p = detectProblems(result);
-    log('3/7', `Rewrite done: ${wc(result)} words | problem score=${p.score} | burst=${p.burst}`);
+    log('3/7', `Rewrite done: ${wc(result)} words | score=${p.score} | burst=${p.burst}`);
   } catch (e) {
     throw new Error(`Rewrite failed: ${e.message}`);
   }
 
-  // Step 4: Round 1 — fix detectable problems (skips if score already clean)
+  // Step 4: Round 1 — fix detectable problems (score-gated)
   {
     const p = detectProblems(result);
-    const summary = [
-      p.longSentences.length > 0 ? `long=${p.longSentences.length}` : null,
-      p.dramatic.length > 0 ? `dramatic=${p.dramatic.length}` : null,
-      p.banned.length > 0 ? `banned=${p.banned.length}` : null,
-      p.hasEmDash ? 'em-dash' : null,
-    ].filter(Boolean).join(' | ');
-
     if (p.score <= 2) {
       log('4/7', `Round 1: Score clean (${p.score}) — skipping`);
     } else {
+      const summary = [
+        p.longSentences.length > 0 ? `long=${p.longSentences.length}` : null,
+        p.dramatic.length > 0 ? `dramatic=${p.dramatic.length}` : null,
+        p.banned.length > 0 ? `banned=${p.banned.length}` : null,
+        p.hasEmDash ? 'em-dash' : null,
+      ].filter(Boolean).join(' | ');
       log('4/7', `Round 1: Fix problems (score=${p.score} | ${summary || 'misc'})...`);
       try {
         const fix = await round1_fixProblems(apiKey, result, originalWordCount);
         result = fix.text;
-        const newScore = detectProblems(result).score;
-        log('4/7', `After round 1: ${wc(result)} words | score=${newScore} | burst=${calcBurstiness(result)}`);
+        log('4/7', `After round 1: ${wc(result)} words | score=${detectProblems(result).score} | burst=${calcBurstiness(result)}`);
       } catch (e) {
         log('4/7', `Round 1 failed (${e.message}) — continuing`);
       }
     }
   }
 
-  // Step 5: Round 2 — break up essay structure (ALWAYS RUNS)
-  log('5/7', `Round 2: Breaking up essay structure and improving flow...`);
+  // Step 5: Round 2 — break essay structure (ALWAYS RUNS)
+  log('5/7', 'Round 2: Breaking up essay structure and improving flow...');
   try {
     result = await round2_breakStructure(apiKey, result, originalWordCount);
     log('5/7', `After round 2: ${wc(result)} words | burst=${calcBurstiness(result)}`);
@@ -536,21 +583,22 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
     log('5/7', `Round 2 failed (${e.message}) — continuing`);
   }
 
-  // Step 6: Round 3 — add burstiness and casual language (ALWAYS RUNS)
-  log('6/7', `Round 3: Adding burstiness and casual language...`);
+  // Step 6: Round 3 — burstiness and casual language (ALWAYS RUNS)
+  log('6/7', 'Round 3: Adding burstiness and casual language...');
   try {
     result = await round3_addBurstiness(apiKey, result, originalWordCount);
-    const finalBurst = calcBurstiness(result);
-    log('6/7', `After round 3: ${wc(result)} words | burst=${finalBurst}`);
+    log('6/7', `After round 3: ${wc(result)} words | burst=${calcBurstiness(result)}`);
   } catch (e) {
     log('6/7', `Round 3 failed (${e.message}) — continuing`);
   }
 
-  // Step 7: Final word count
+  // Final hard scrub before output
+  result = hardScrub(result);
+
+  // Step 7: Word count fix
   const currentWC = wc(result);
   const min = Math.floor(originalWordCount * 0.93);
   const max = Math.ceil(originalWordCount * 1.07);
-
   if (currentWC < min || currentWC > max) {
     log('7/7', `Word count fix (${currentWC} → target ${originalWordCount})...`);
     try {
@@ -628,14 +676,15 @@ ${sentenceBreakdown}
 
 RULES:
 • Every sentence under 18 words
-• No em dashes ever
-• No colon lists
-• No dramatic phrases — no "transformative", "revolutionizing", "reshaping", "remarkable", "superpowers"
+• No em dashes (—) ever
+• No colon setups like "here's the thing:"
+• No rhetorical questions like "Why? Because..."
+• No one-word dramatic sentences like "Unstoppable."
+• No dramatic contrasts like "Not replacing people. Empowering them."
 • Plain casual words: "lots of", "way more", "can't", "used to", "tons of"
 • Use "I" and "we" naturally
-• State your position at the start
-• Repeat the main point at the end
-• Write as one flowing stream — NOT organized paragraphs with topic sentences
+• State your position at the start, repeat at the end
+• Write as one flowing stream, not organized essay paragraphs
 
 ${userStyleBlock}
 
@@ -643,9 +692,11 @@ OUTPUT: Return ONLY the answer.`,
     `Question: "${question}"\n\nWrite the answer matching the sentence-by-sentence structure of the template.`,
     0.88, 800);
 
+  const scrubbed = hardScrub(draft);
+
   log('2/3', 'Checking for remaining AI patterns...');
-  const draftSentences = getSentences(draft);
-  const final = await mistral(apiKey,
+  const draftSentences = getSentences(scrubbed);
+  const finalRaw = await mistral(apiKey,
     `Compare this draft to the human answer and fix anything that diverged.
 
 HUMAN ANSWER:
@@ -656,13 +707,14 @@ ${draftSentences.map((s, i) => `D${i + 1} [${s.split(/\s+/).length}w]: "${s}"`).
 
 Fix:
 1. Any sentence over 18 words — split it
-2. Any em dash — replace with period + new sentence
+2. Any em dash — replace with period
 3. Any dramatically longer sentence than its counterpart — shorten
-4. Any journalistic, dramatic, or "superpowers"-style phrasing — make plain
+4. Any journalistic or dramatic phrasing — make plain
 
 Output ONLY the corrected answer.`,
-    draft, 0.4, 800);
+    scrubbed, 0.4, 800);
 
+  const final = hardScrub(finalRaw);
   log('3/3', 'Done');
 
   return {
