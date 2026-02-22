@@ -173,14 +173,27 @@ Output ONLY the trimmed text. Nothing else.`;
 }
 
 // ─── Find the Aiden example most similar to a question (for Answer tab) ───────
+// For out-of-dataset questions, fall back to the most structurally versatile examples
 function findClosestAidenExample(question) {
   const q = question.toLowerCase();
-  const scores = AIDEN_EXAMPLES.map((ex, i) => {
-    const keywords = ex.question.toLowerCase().split(/\s+/).filter(w => w.length > 4);
-    return { i, score: keywords.filter(w => q.includes(w)).length };
+  const qWords = q.split(/\s+/).filter(w => w.length > 3);
+
+  const scored = AIDEN_EXAMPLES.map((ex, i) => {
+    const exWords = ex.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    // Score both word overlap AND semantic overlap (partial matches)
+    const exact = qWords.filter(w => exWords.includes(w)).length;
+    const partial = qWords.filter(w => exWords.some(ew => ew.includes(w) || w.includes(ew))).length;
+    return { i, score: exact * 2 + partial };
   });
-  scores.sort((a, b) => b.score - a.score);
-  return AIDEN_EXAMPLES[scores[0].i];
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    // Tiebreak: prefer examples 4 (domestic) or 1 (jobs) — most versatile argument structures
+    const prefer = [4, 1, 2, 3, 0, 5];
+    return prefer.indexOf(a.i) - prefer.indexOf(b.i);
+  });
+
+  return AIDEN_EXAMPLES[scored[0].i];
 }
 
 // ─── Find Aiden example closest in sentence count to input (for Humanize) ─────
