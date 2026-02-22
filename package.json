@@ -1,10 +1,12 @@
 {
   "name": "humanizer-v8",
   "version": "8.0.0",
-  "description": "AI humanizer — real Reddit scraping + multi-pass Groq pipeline",
+  "description": "AI humanizer — real Reddit scraping + multi-pass Mistral pipeline",
   "type": "module",
+  "_deploy": "2026-02-22-v3",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "node --version"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
