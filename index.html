@@ -297,7 +297,7 @@ select:focus{border-color:var(--accent)}
       <div class="tip"><div class="tip-n">Tip 04</div><h3>Split long texts</h3><p>Over 700 words? Split into sections and humanize each one separately. Quality drops noticeably on longer chunks.</p></div>
       <div class="tip"><div class="tip-n">Tip 05</div><h3>Run it twice</h3><p>Humanize → copy → paste back → run on Subtle mode. Two passes creates layered variation that's hard to fingerprint as any known humanizer pattern.</p></div>
       <div class="tip"><div class="tip-n">Tip 06</div><h3>Burstiness score</h3><p>Human writing scores 0.5+. Below 0.4 means sentence lengths are still too uniform — the #1 detection signal on both Turnitin and GPTZero. Run again if you see red.</p></div>
-      <div class="tip"><div class="tip-n">Tip 07</div><h3>Datasets = reversed GPTZero</h3><p>Every run extracts topics from your exact text, fetches a larger topic-matched Reddit corpus, generates matched AI lookalikes, then forces alignment toward human patterns and away from AI patterns.</p></div>
+      <div class="tip"><div class="tip-n">Tip 07</div><h3>Datasets = reversed GPTZero</h3><p>Every run pulls fresh Reddit writing via JSON API, builds AI lookalikes from those exact topics, and compares both in the prompt so the model follows real human patterns instead of static canned samples.</p></div>
       <div class="tip"><div class="tip-n">Tip 08</div><h3>Fragment injection</h3><p>The scrubber injects deliberately incomplete sentences — fragments. Real humans write fragments constantly. AI almost never does. Each fragment is a perplexity spike that detectors read as human.</p></div>
     </div>
   </div>
@@ -375,23 +375,7 @@ function countFragments(text) {
 function normalizeParagraph(text) {
   if (!text) return '';
   const clean = text.replace(/\s+/g, ' ').trim();
-  return clean.length >= 90 ? clean : '';
-}
-
-function escapeTopic(topic) {
-  return encodeURIComponent((topic || '').trim());
-}
-
-function scoreTopicMatch(text, topics) {
-  const lower = (text || '').toLowerCase();
-  let score = 0;
-  for (const t of topics) {
-    const words = t.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    for (const w of words) {
-      if (lower.includes(w)) score += 1;
-    }
-  }
-  return score;
+  return clean.length >= 120 ? clean : '';
 }
 
 async function fetchRedditJson(url) {
@@ -400,68 +384,37 @@ async function fetchRedditJson(url) {
   return await res.json();
 }
 
-async function extractTopicSeeds(apiKey, inputText) {
-  const clipped = inputText.slice(0, 2200);
-  const system = `Extract writing topics for Reddit retrieval.
-Return ONLY JSON: {"topics":["...","..."]}.
-Rules:
-- Return 5 to 7 concise topic queries.
-- Keep each query 2-5 words.
-- Queries should target the same subject matter as the input text.`;
-  const raw = await callGroq(apiKey, system, `Input text:
+async function fetchRedditCorpus(limit = 24) {
+  const sources = [
+    'https://www.reddit.com/r/AskReddit/top.json?t=month&limit=40',
+    'https://www.reddit.com/r/CasualConversation/top.json?t=month&limit=40',
+    'https://www.reddit.com/r/TrueOffMyChest/top.json?t=month&limit=40',
+    'https://www.reddit.com/r/college/top.json?t=month&limit=40'
+  ];
 
-${clipped}`, 0.15, 220);
-  try {
-    const parsed = JSON.parse(raw);
-    const topics = Array.isArray(parsed.topics) ? parsed.topics.map(t => String(t).trim()).filter(Boolean) : [];
-    if (topics.length >= 3) return topics.slice(0, 7);
-  } catch (e) {}
-
-  const words = [...new Set(clipped.toLowerCase().match(/[a-z]{4,}/g) || [])].slice(0, 6);
-  return words.length ? words.map(w => w) : ['college writing', 'study habits', 'daily life'];
-}
-
-async function fetchRedditTopicCorpus(topics, target = 48) {
   const out = [];
-  const seen = new Set();
-
-  for (const topic of topics) {
-    const query = escapeTopic(topic);
-    const urls = [
-      `https://www.reddit.com/search.json?q=${query}&sort=top&t=year&limit=60`,
-      `https://www.reddit.com/search.json?q=${query}&sort=relevance&t=year&limit=60`
-    ];
-
-    for (const src of urls) {
-      try {
-        const json = await fetchRedditJson(src);
-        const posts = json?.data?.children || [];
-        for (const item of posts) {
-          const d = item?.data || {};
-          const pieces = [d.selftext, d.title, d.subreddit_name_prefixed ? `${d.subreddit_name_prefixed}: ${d.title || ''}` : ''];
-          for (const piece of pieces) {
-            const body = normalizeParagraph(piece || '');
-            if (!body) continue;
-            if (seen.has(body)) continue;
-            seen.add(body);
-            out.push({ text: body, score: scoreTopicMatch(body, topics) });
-            if (out.length >= target) return out;
-          }
-        }
-      } catch (e) {
-        console.warn('Reddit source skipped:', src, e.message);
+  for (const src of sources) {
+    try {
+      const json = await fetchRedditJson(src);
+      const posts = json?.data?.children || [];
+      for (const item of posts) {
+        const d = item?.data || {};
+        const body = normalizeParagraph(d.selftext || d.title || '');
+        if (body) out.push(body);
+        if (out.length >= limit) return out;
       }
+    } catch (e) {
+      console.warn('Reddit source skipped:', src, e.message);
     }
   }
-
   return out;
 }
 
-function buildContrastPairs(human, ai, count = 6) {
+function buildContrastPairs(human, ai, count = 4) {
   const max = Math.min(count, human.length, ai.length);
   const pairs = [];
   for (let i = 0; i < max; i++) {
-    const topicWords = (human[i].split(/\s+/).slice(0, 7).join(' ') || 'reddit writing sample').replace(/[.!,;:?]+$/g, '');
+    const topicWords = (human[i].split(/\s+/).slice(0, 6).join(' ') || 'reddit writing sample').replace(/[.!,;:?]+$/g, '');
     pairs.push({ topic: topicWords, human: human[i], ai: ai[i] });
   }
   return pairs;
@@ -473,12 +426,12 @@ async function synthesizeAiCorpus(apiKey, humanExamples) {
 Return ONLY valid JSON with this shape: {"ai":["...", "..."]}.
 Rules:
 - Create exactly ${humanExamples.length} paragraphs.
-- Paragraph i must stay on the same topic as human example i.
-- Intentionally use common LLM patterns: smooth transitions, formal topic sentences, predictable phrasing.
-- Keep each paragraph 90-170 words.`;
+- Paragraph i should be about the same topic as human example i.
+- Intentionally use common LLM phrasing patterns (clean transitions, formal topic sentences, predictable wording).
+- Keep each paragraph 90-160 words.`;
   const raw = await callGroq(apiKey, system, `Human examples:
 
-${list}`, 0.35, 3200);
+${list}`, 0.35, 2200);
   try {
     const parsed = JSON.parse(raw);
     const ai = Array.isArray(parsed.ai) ? parsed.ai.map(t => t.trim()).filter(Boolean) : [];
@@ -489,19 +442,17 @@ ${list}`, 0.35, 3200);
   }
 }
 
-async function getRuntimeCorpus(apiKey, inputText) {
+async function getRuntimeCorpus(apiKey) {
   if (runtimeCorpusCache) return runtimeCorpusCache;
 
-  const topics = await extractTopicSeeds(apiKey, inputText);
-  const pool = await fetchRedditTopicCorpus(topics, 56);
-  if (pool.length < 16) throw new Error('Could not fetch enough topic-matched Reddit writing samples right now. Try again in a minute.');
+  const human = await fetchRedditCorpus(24);
+  if (human.length < 8) throw new Error('Could not fetch enough Reddit writing samples right now. Try again in a minute.');
 
-  const sorted = [...pool].sort((a, b) => b.score - a.score);
-  const pickedHuman = sorted.slice(0, 16).map(x => x.text);
+  const pickedHuman = shuffleSlice(human, 8);
   const ai = await synthesizeAiCorpus(apiKey, pickedHuman);
-  const contrasts = buildContrastPairs(pickedHuman, ai, 6);
+  const contrasts = buildContrastPairs(pickedHuman, ai, 4);
 
-  runtimeCorpusCache = { topics, human: pickedHuman, ai, contrasts };
+  runtimeCorpusCache = { human: pickedHuman, ai, contrasts };
   return runtimeCorpusCache;
 }
 
@@ -688,34 +639,12 @@ async function rewriteText(apiKey, inputText, strength, styleExamples, runtime) 
   const subRules = buildSubstitutionRules(SUBS);
   const imperfRules = buildImperfectionRules(IMPERFS, strength);
 
-  const humanSample = runtime.human.slice(0, 12);
-  const aiSample = runtime.ai.slice(0, 12);
+  const runtime = await getRuntimeCorpus(apiKey);
+  const humanSample = runtime.human;
+  const aiSample = runtime.ai;
   const contrastSample = runtime.contrasts;
-  const topicLine = runtime.topics && runtime.topics.length ? runtime.topics.join(', ') : "the source text";
 
-  const datasetBlock = `
-
-━━ TOPIC TARGETS FROM YOUR INPUT ━━
-${topicLine}
-
-━━ REAL HUMAN WRITING (topic-matched Reddit JSON corpus, 12 shown this run) — write like this ━━
-Follow their unpredictability, directness, and uneven rhythm:
-
-${humanSample.map((p, i) => `[Human example ${i + 1}]
-${p}`).join('\n\n')}
-
-━━ AI LOOKALIKE WRITING (generated on those same topics, 12 shown this run) — NEVER write like this ━━
-These intentionally imitate standard AI tendencies. Keep your output far from this style:
-
-${aiSample.map((p, i) => `[AI example ${i + 1}]
-${p}`).join('\n\n')}
-
-━━ SAME-TOPIC CONTRASTS (Reddit human vs AI lookalike, 6 shown this run) ━━
-At every sentence, prefer HUMAN-like decisions and avoid AI-like phrasing:
-
-${contrastSample.map(c => `[Topic seed: ${c.topic}]
-▸ HUMAN: ${c.human}
-▸ AI: ${c.ai}`).join('\n\n')}`;
+  const datasetBlock = `\n\n━━ REAL HUMAN WRITING (live Reddit JSON samples, 8 shown this run) — write like this ━━\nThese are pulled from real Reddit users. Follow their unpredictability, directness, and uneven rhythm:\n\n${humanSample.map((p, i) => `[Human example ${i + 1}]\n${p}`).join('\n\n')}\n\n━━ AI LOOKALIKE WRITING (generated on same topics, 8 shown this run) — NEVER write like this ━━\nThese were generated to mimic standard AI tendencies. Your output must avoid this structure and tone:\n\n${aiSample.map((p, i) => `[AI example ${i + 1}]\n${p}`).join('\n\n')}\n\n━━ SAME-TOPIC CONTRASTS (Reddit human vs AI lookalike, 4 shown this run) ━━\nInternalize the exact difference and stay on the HUMAN side sentence-by-sentence:\n\n${contrastSample.map(c => `[Topic seed: ${c.topic}]\n▸ HUMAN: ${c.human}\n▸ AI: ${c.ai}`).join('\n\n')}`;
 
   const system = `${personas[strength]}${hardRulesBlock}${styleBlock}${subRules}${imperfRules}${datasetBlock}
 
@@ -835,7 +764,7 @@ async function run() {
 
   startProg();
   setStep(1);
-  setStatus('Pass 1 — Finding topics + collecting Reddit writing...', 'working');
+  setStatus('Pass 1 — Building live Reddit corpus + rewriting...', 'working');
 
   try {
     // Analyze raw sample if not yet done
