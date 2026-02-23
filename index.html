@@ -119,6 +119,8 @@ select:focus{border-color:var(--accent)}
 .q-input{width:100%;padding:14px 16px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.6;resize:vertical;outline:none;min-height:80px}
 .q-input:focus{border-color:var(--accent)}
 .q-input::placeholder{color:var(--dim);font-style:italic}
+.answer-mode{display:none}
+.answer-mode.active{display:flex}
 
 /* style tab */
 .style-desc{font-size:0.83rem;color:#555580;line-height:1.65;max-width:580px}
@@ -202,14 +204,14 @@ select:focus{border-color:var(--accent)}
 
 <div class="app">
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('main',this)">Humanize</button>
-    <button class="tab" onclick="switchTab('answer',this)">Answer as Human</button>
+    <button class="tab active" onclick="switchTab('answer',this)">Answer as Human</button>
+    <button class="tab" onclick="switchTab('main',this)">Humanize</button>
     <button class="tab" onclick="switchTab('style',this)">Writing Style</button>
     <button class="tab" onclick="switchTab('tips',this)">Tips</button>
   </div>
 
   <!-- HUMANIZE TAB -->
-  <div id="tab-main" class="panel active">
+  <div id="tab-main" class="panel">
     <div class="steps">
       <div class="step active" id="step1"><div class="sdot">1</div><span>Analyze</span></div>
       <div class="sline"></div>
@@ -266,19 +268,32 @@ select:focus{border-color:var(--accent)}
   </div>
 
   <!-- ANSWER AS HUMAN TAB -->
-  <div id="tab-answer" class="panel">
+  <div id="tab-answer" class="panel active">
     <div style="font-size:0.83rem;color:#555580;line-height:1.65;max-width:620px">
       Type a question and get an answer written in human voice — direct, personal, confident. Not AI balanced. Not hedged. A real human answer.
     </div>
 
-    <div class="field">
+    <div class="meth-grid" style="margin-bottom:4px">
+      <button class="meth-btn active" id="answerModeSingleBtn" onclick="switchAnswerMode('single',this)">💬 Single answer</button>
+      <button class="meth-btn" id="answerModeWorksheetBtn" onclick="switchAnswerMode('worksheet',this)">📝 Worksheet mode</button>
+    </div>
+
+    <div class="field answer-mode answer-mode-single active" id="answerModeSingle">
       <div class="flabel">Your question</div>
       <textarea class="q-input" id="questionInput" placeholder="e.g. Should the US focus more on domestic strength than foreign intervention?"></textarea>
     </div>
 
+    <div class="field answer-mode answer-mode-worksheet" id="answerModeWorksheet">
+      <div class="flabel">Worksheet questions</div>
+      <div class="fhint">Paste one question per line. You can also number them like "1) ...".</div>
+      <textarea class="q-input" id="worksheetInput" placeholder="1) What is globalization?&#10;2) Is AI helping education?&#10;3) Should schools ban phones?"></textarea>
+    </div>
+
     <div class="controls">
       <button class="btn-p" id="answerBtn" onclick="answer()">Answer as Human →</button>
+      <button class="btn-p" id="worksheetBtn" onclick="answerWorksheet()" style="display:none">Answer worksheet →</button>
       <button class="btn-g" onclick="copyOut('answerOutput')">Copy answer</button>
+      <button class="btn-g" onclick="clearConversation()">Clear thread</button>
     </div>
 
     <div class="prog-track" id="answerProg"><div class="prog-fill" id="answerProgFill"></div></div>
@@ -403,6 +418,8 @@ select:focus{border-color:var(--accent)}
 let styleProfile = null;
 let sessionToken = localStorage.getItem('humanizer_token') || null;
 let currentPlan = 'free';
+let answerMode = 'single';
+const answerHistory = [];
 
 const wc = t => t.trim() ? t.trim().split(/\s+/).length : 0;
 
@@ -500,6 +517,22 @@ function switchMethod(name, btn) {
   document.querySelectorAll('.meth-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('m-' + name).classList.add('active');
   btn.classList.add('active');
+}
+function switchAnswerMode(mode, btn) {
+  answerMode = mode;
+  document.querySelectorAll('.answer-mode').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#answerModeSingleBtn,#answerModeWorksheetBtn').forEach(b => b.classList.remove('active'));
+  document.getElementById(mode === 'single' ? 'answerModeSingle' : 'answerModeWorksheet').classList.add('active');
+  btn.classList.add('active');
+  document.getElementById('answerBtn').style.display = mode === 'single' ? '' : 'none';
+  document.getElementById('worksheetBtn').style.display = mode === 'worksheet' ? '' : 'none';
+  document.getElementById('answerOutput').textContent = mode === 'worksheet' ? 'Worksheet answers appear here...' : 'Your answer appears here...';
+  document.getElementById('answerOutput').classList.add('answer-placeholder');
+}
+
+function clearConversation() {
+  answerHistory.length = 0;
+  setStatus('answerStatus', 'Conversation cleared.', 'ok');
 }
 function setStatus(id, msg, type='') {
   document.getElementById(id + 'Msg').textContent = msg;
@@ -670,7 +703,7 @@ async function answer() {
     const response = await fetch('/answer', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ apiKey, question, styleProfile })
+      body: JSON.stringify({ apiKey, question, styleProfile, history: answerHistory })
     });
 
     if (response.status === 402) {
@@ -706,6 +739,9 @@ async function answer() {
         } else if (event.type === 'result') {
           outEl.textContent = event.text;
           outEl.classList.remove('answer-placeholder');
+          answerHistory.push({ role: 'user', content: question });
+          answerHistory.push({ role: 'assistant', content: event.text });
+          if (answerHistory.length > 20) answerHistory.splice(0, answerHistory.length - 20);
           document.getElementById('answerWC').textContent = wc(event.text) + ' words';
           const s = event.scores;
           sc('aWords', s.bannedWordsFound.length === 0 ? '✓ clean' : s.bannedWordsFound.length + ' found', s.bannedWordsFound.length === 0 ? 'g' : 'b');
@@ -732,6 +768,95 @@ async function answer() {
     setStatus('answerStatus', 'Error: ' + err.message, 'err');
     outEl.textContent = 'Error — see status above.';
   }
+  btn.disabled = false;
+}
+
+function parseWorksheetQuestions(raw) {
+  return raw.split('\n')
+    .map(line => line.trim())
+    .map(line => line.replace(/^\d+\s*[\.)-]\s*/, '').trim())
+    .filter(Boolean);
+}
+
+async function answerWorksheet() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const raw = document.getElementById('worksheetInput').value.trim();
+  const btn = document.getElementById('worksheetBtn');
+  const outEl = document.getElementById('answerOutput');
+
+  if (!apiKey) return setStatus('answerStatus', 'Enter your Mistral API key.', 'err');
+  const questions = parseWorksheetQuestions(raw);
+  if (!questions.length) return setStatus('answerStatus', 'Paste at least one worksheet question.', 'err');
+
+  btn.disabled = true;
+  document.getElementById('answerLog').innerHTML = '';
+  document.getElementById('answerLog').classList.remove('show');
+  document.getElementById('answerScoreRow').style.display = 'none';
+  outEl.textContent = 'Generating worksheet answers...';
+  outEl.classList.add('answer-placeholder');
+  showProg('answerProg'); setProg('answerProgFill', 8);
+  setStatus('answerStatus', `Answering ${questions.length} questions...`, 'working');
+
+  try {
+    const answers = [];
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      addLog('answerLog', `[${i + 1}/${questions.length}] ${q}`);
+      setProg('answerProgFill', Math.min(95, 8 + Math.round(((i + 1) / questions.length) * 82)));
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (sessionToken) headers['X-Session-Token'] = sessionToken;
+      const response = await fetch('/answer', {
+        method: 'POST', headers,
+        body: JSON.stringify({ apiKey, question: q, styleProfile, history: [] })
+      });
+
+      if (response.status === 402) throw new Error('Out of uses — upgrade your plan.');
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Server error');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalText = '';
+      let finalUsesLeft;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let event;
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+          if (event.type === 'result') {
+            finalText = event.text || '';
+            finalUsesLeft = event.usesLeft;
+          }
+          if (event.type === 'error') throw new Error(event.message || 'Server error');
+        }
+      }
+
+      answers.push(`Q${i + 1}. ${q}\n${finalText}`);
+      if (finalUsesLeft !== undefined) updateUsageBadge(finalUsesLeft, currentPlan);
+    }
+
+    outEl.textContent = answers.join('\n\n');
+    outEl.classList.remove('answer-placeholder');
+    document.getElementById('answerWC').textContent = wc(outEl.textContent) + ' words';
+    hideProg('answerProg');
+    setStatus('answerStatus', 'Worksheet complete.', 'ok');
+    addLog('answerLog', 'Complete ✓', 'done');
+  } catch (err) {
+    hideProg('answerProg');
+    setStatus('answerStatus', 'Error: ' + err.message, 'err');
+    outEl.textContent = 'Error — see status above.';
+  }
+
   btn.disabled = false;
 }
 
