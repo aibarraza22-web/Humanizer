@@ -157,3 +157,44 @@ export const AI_OPENERS = [
   /^(Here'?s? (what|why|the|how))/i,
   /^(It is (clear|evident|apparent) that)\s/i,
 ];
+
+
+// Deterministic post-processing helpers (no extra LLM calls)
+export const CONTRACTION_MAP = {
+  'do not': "don't", 'does not': "doesn't", 'did not': "didn't",
+  'cannot': "can't", 'can not': "can't", 'will not': "won't",
+  'it is': "it's", 'that is': "that's", 'there is': "there's",
+  'I am': "I'm", 'we are': "we're", 'they are': "they're",
+  'you are': "you're", 'is not': "isn't", 'are not': "aren't",
+  'was not': "wasn't", 'were not': "weren't", 'have not': "haven't",
+  'has not': "hasn't", 'had not': "hadn't", 'would not': "wouldn't",
+  'could not': "couldn't", 'should not': "shouldn't"
+};
+
+export const FILLER_PHRASES = [
+  'to be honest', 'for me', 'in my view', 'right now', 'at this point',
+  'and yeah', 'also', 'plus', 'honestly', 'in real life'
+];
+
+// Public dataset pointers for importing real human/AI/mixed text.
+// Intentionally references external sources rather than model-generated samples.
+export const DATASET_SOURCES = [
+  {
+    name: 'HC3',
+    kind: 'human+ai',
+    url: 'https://huggingface.co/datasets/Hello-SimpleAI/HC3',
+    notes: 'Human answers + ChatGPT answers across domains.'
+  },
+  {
+    name: 'Ghostbuster',
+    kind: 'human+ai',
+    url: 'https://huggingface.co/datasets/rungalileo/ghostbuster',
+    notes: 'Human and machine-generated pairs used for detection research.'
+  },
+  {
+    name: 'WritingPrompts',
+    kind: 'human',
+    url: 'https://huggingface.co/datasets/euclaise/writingprompts',
+    notes: 'Large corpus of human fiction writing for style diversity.'
+  }
+];

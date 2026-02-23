@@ -6,7 +6,8 @@
   "_deploy": "2026-02-22-v11",
   "scripts": {
     "start": "node server.js",
-    "build": "node --version"
+    "build": "node --version",
+    "import:datasets": "node scripts/import-real-datasets.mjs"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

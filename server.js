@@ -133,7 +133,7 @@ app.post('/answer', async (req, res) => {
   const session = checkUsage(req, res);
   if (!session) return;
 
-  const { apiKey, question, styleProfile } = req.body;
+  const { apiKey, question, styleProfile, history } = req.body;
   if (!apiKey) return res.status(400).json({ error: 'Missing API key' });
   if (!question) return res.status(400).json({ error: 'Missing question' });
 
@@ -147,7 +147,8 @@ app.post('/answer', async (req, res) => {
   try {
     const result = await answerAsAiden(
       apiKey, question, styleProfile || null,
-      ({ step, msg }) => send({ type: 'progress', step, msg })
+      ({ step, msg }) => send({ type: 'progress', step, msg }),
+      Array.isArray(history) ? history : []
     );
     send({ type: 'result', text: result.text, scores: result.scores, usesLeft: session.usesLeft });
   } catch (err) {
