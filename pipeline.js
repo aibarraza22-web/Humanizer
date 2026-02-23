@@ -17,6 +17,9 @@ const MODEL = 'mistral-large-latest';
 function hardScrub(text) {
   let t = text;
 
+  // Remove parenthetical asides that read like model-disclaimer glue
+  t = t.replace(/\s*\(([^)]{0,140})\)\s*/g, ' ');
+
   // Em dashes → period + new sentence
   t = t.replace(/\s*—\s*/g, '. ');
 
@@ -368,7 +371,9 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
   const rewritePrompt = `Rewrite this text so it reads like a real person writing naturally.
 Keep the original meaning and roughly similar length.
 Use conversational flow, varied sentence lengths, and direct language.
+Remove parenthetical asides unless they are essential factual data.
 Avoid list formatting, headers, and over-structured transitions.
+Avoid Quillbot-like synonym swaps and "academic polish" phrasing.
 Avoid these AI-like patterns:
 ${negativeBlock}
 Use this human style as anchor:
@@ -435,9 +440,10 @@ export async function answerAsAiden(apiKey, question, styleProfile, onProgress, 
     {
       role: 'system',
       content: `You are a normal helpful assistant. Sound human and conversational, not robotic.
-Answer directly, then explain briefly.
+Answer directly, then explain briefly, in a way that still sounds strong after light humanization.
 Do not use list formatting unless the user asks.
 Do not hedge excessively or write like an essay.
+Avoid parenthetical asides and "over-polished" Quillbot phrasing.
 Avoid these AI patterns:
 ${negativeBlock}
 Human voice anchors:
@@ -449,8 +455,9 @@ ${userStyleBlock}`
   ];
 
   log('2/2', 'Generating answer (single model pass)...');
-  let result = await mistralMessages(apiKey, messages, 0.82, 1000);
-  result = humanizeText(result);
+  const isLongForm = wc(question) > 120;
+  let result = await mistralMessages(apiKey, messages, isLongForm ? 0.76 : 0.82, isLongForm ? 1600 : 1000);
+  result = hardScrub(result).replace(/\s{2,}/g, ' ').trim();
 
   return {
     text: result,
