@@ -115,6 +115,12 @@ select:focus{border-color:var(--accent)}
 /* answer tab */
 .answer-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;background:var(--s1)}
 .answer-out{min-height:200px;padding:16px;font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.76;color:var(--text2);white-space:pre-wrap;cursor:default}
+.thread{border:1px solid var(--border);border-radius:var(--r2);background:var(--s1);padding:12px;max-height:280px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.thread-item{padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--s2)}
+.thread-role{font-family:'JetBrains Mono',monospace;font-size:0.58rem;text-transform:uppercase;letter-spacing:0.09em;color:#8a8ab3;margin-bottom:4px}
+.thread-item.user .thread-role{color:#7aa2ff}
+.thread-item.assistant .thread-role{color:#8bffb1}
+.thread-text{font-size:0.86rem;line-height:1.6;color:var(--text2);white-space:pre-wrap}
 .answer-placeholder{color:var(--dim);font-style:italic}
 .q-input{width:100%;padding:14px 16px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.6;resize:vertical;outline:none;min-height:80px}
 .q-input:focus{border-color:var(--accent)}
@@ -303,6 +309,13 @@ select:focus{border-color:var(--accent)}
     <div class="answer-box" id="answerBox">
       <div class="ehead"><span class="elabel">Answer</span><span class="ewc" id="answerWC">0 words</span></div>
       <div class="answer-out answer-placeholder" id="answerOutput">Your answer appears here...</div>
+    </div>
+
+    <div class="field">
+      <div class="flabel">Conversation thread</div>
+      <div class="thread" id="conversationThread">
+        <div class="thread-text">No conversation yet. Ask a question to start.</div>
+      </div>
     </div>
 
     <div class="score-row" id="answerScoreRow" style="display:none">
@@ -504,6 +517,7 @@ document.getElementById('upgradeModal').addEventListener('click', function(e) {
 
 // Init session on load
 initSession();
+renderConversation();
 
 // ─── Tab / Method switching ──────────────────────────────────────────────────
 function switchTab(name, btn) {
@@ -528,10 +542,12 @@ function switchAnswerMode(mode, btn) {
   document.getElementById('worksheetBtn').style.display = mode === 'worksheet' ? '' : 'none';
   document.getElementById('answerOutput').textContent = mode === 'worksheet' ? 'Worksheet answers appear here...' : 'Your answer appears here...';
   document.getElementById('answerOutput').classList.add('answer-placeholder');
+  renderConversation();
 }
 
 function clearConversation() {
   answerHistory.length = 0;
+  renderConversation();
   setStatus('answerStatus', 'Conversation cleared.', 'ok');
 }
 function setStatus(id, msg, type='') {
@@ -549,6 +565,23 @@ function setStep(n) {
 }
 const stepForMsg = msg => { const m = msg.match(/^(\d)\/6/); return m ? parseInt(m[1]) : null; };
 const progForStep = n => [0, 12, 28, 45, 62, 78, 95][n] || 0;
+
+function renderConversation() {
+  const el = document.getElementById('conversationThread');
+  if (!el) return;
+  if (!answerHistory.length) {
+    el.innerHTML = '<div class="thread-text">No conversation yet. Ask a question to start.</div>';
+    return;
+  }
+
+  const rows = answerHistory.slice(-12).map(m => {
+    const role = m.role === 'user' ? 'You' : 'Assistant';
+    const safe = (m.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `<div class="thread-item ${m.role}"><div class="thread-role">${role}</div><div class="thread-text">${safe}</div></div>`;
+  });
+  el.innerHTML = rows.join('');
+  el.scrollTop = el.scrollHeight;
+}
 
 function addLog(panelId, msg, state='active') {
   const panel = document.getElementById(panelId);
@@ -742,6 +775,7 @@ async function answer() {
           answerHistory.push({ role: 'user', content: question });
           answerHistory.push({ role: 'assistant', content: event.text });
           if (answerHistory.length > 20) answerHistory.splice(0, answerHistory.length - 20);
+          renderConversation();
           document.getElementById('answerWC').textContent = wc(event.text) + ' words';
           const s = event.scores;
           sc('aWords', s.bannedWordsFound.length === 0 ? '✓ clean' : s.bannedWordsFound.length + ' found', s.bannedWordsFound.length === 0 ? 'g' : 'b');

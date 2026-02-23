@@ -28,6 +28,22 @@ const DATASETS = [
     fallbackUrls: [
       'https://huggingface.co/datasets/rungalileo/ghostbuster/resolve/main/train.jsonl'
     ]
+  },
+  {
+    name: 'dipper_human_vs_ai',
+    hfDataset: 'kalpeshk2011/dipper-human-vs-ai-text-detection',
+    preferredConfigs: ['default', 'train'],
+    fallbackUrls: [
+      'https://huggingface.co/datasets/kalpeshk2011/dipper-human-vs-ai-text-detection/resolve/main/train.jsonl'
+    ]
+  },
+  {
+    name: 'mage',
+    hfDataset: 'yaful/MAGE',
+    preferredConfigs: ['default', 'train'],
+    fallbackUrls: [
+      'https://huggingface.co/datasets/yaful/MAGE/resolve/main/train.jsonl'
+    ]
   }
 ];
 
@@ -210,3 +226,5 @@ if (success === 0) {
 } else {
   console.log('Done. Next step: label samples with GPTZero externally, then curate human/mixed/ai/paraphrased splits.');
 }
+
+console.log('Suggested GPTZero labels: human, ai, ai_paraphrased, ai_mixed, ai_polished.');
