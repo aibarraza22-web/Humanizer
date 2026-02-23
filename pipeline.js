@@ -5,7 +5,7 @@
 // hardScrub() = regex post-processor catching AI casual patterns
 
 import fetch from 'node-fetch';
-import { AIDEN_EXAMPLES, AI_COUNTER_EXAMPLES, BANNED, DRAMATIC_PHRASES, AI_OPENERS, CONTRACTION_MAP, FILLER_PHRASES } from './data.js';
+import { AIDEN_EXAMPLES, AI_COUNTER_EXAMPLES, BANNED, DRAMATIC_PHRASES, AI_OPENERS, CONTRACTION_MAP, FILLER_PHRASES, GPTZERO_STYLE_CLASSES } from './data.js';
 
 const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MODEL = 'mistral-large-latest';
@@ -394,6 +394,7 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
   const rewritePrompt = `Rewrite this text so it reads like a real person writing naturally.
 Keep the original meaning and roughly similar length.
 Use conversational flow, varied sentence lengths, and direct language.
+Keep answers simple, direct, and clear. Prefer plain words over polished or academic wording.
 Require noticeable burstiness: mix short and medium sentences plus occasional longer ones, but keep every sentence natural.
 Make it feel personal and lively without sounding forced.
 Remove parenthetical asides unless they are essential factual data.
@@ -473,12 +474,15 @@ export async function answerAsAiden(apiKey, question, styleProfile, onProgress, 
     {
       role: 'system',
       content: `You are a normal helpful assistant. Sound human and conversational, not robotic.
-Answer directly, then explain briefly, in a way that still sounds strong after light humanization.
+Answer directly first. Keep explanations simple, clear, and concrete.
+Use plain words, short lines, and only as much detail as needed.
 Use bursty rhythm: blend short and medium lines with occasional longer ones, but keep it smooth and natural.
 Make the tone personal and lively, like a real person talking.
 Do not use list formatting unless the user asks.
 Do not hedge excessively or write like an essay.
 Avoid parenthetical asides and "over-polished" Quillbot phrasing.
+When relevant, keep style closest to examples that would classify as "human", and avoid styles that read like ai, ai_paraphrased, ai_mixed, or ai_polished.
+GPTZero-style classes to optimize for: ${GPTZERO_STYLE_CLASSES.join(', ')}.
 Avoid these AI patterns:
 ${negativeBlock}
 Human voice anchors:

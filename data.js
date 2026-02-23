@@ -196,5 +196,25 @@ export const DATASET_SOURCES = [
     kind: 'human',
     url: 'https://huggingface.co/datasets/euclaise/writingprompts',
     notes: 'Large corpus of human fiction writing for style diversity.'
+  },
+  {
+    name: 'DIPPER Human-vs-AI',
+    kind: 'human+ai_paraphrased',
+    url: 'https://huggingface.co/datasets/kalpeshk2011/dipper-human-vs-ai-text-detection',
+    notes: 'Includes machine-paraphrased samples useful for ai_paraphrased labeling.'
+  },
+  {
+    name: 'MAGE',
+    kind: 'human+ai+ai_polished',
+    url: 'https://huggingface.co/datasets/yaful/MAGE',
+    notes: 'Human and multiple LLM outputs that help separate plain AI from polished AI.'
   }
+];
+
+export const GPTZERO_STYLE_CLASSES = [
+  'human',
+  'ai',
+  'ai_paraphrased',
+  'ai_mixed',
+  'ai_polished'
 ];

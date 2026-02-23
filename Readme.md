@@ -6,7 +6,7 @@ Human-focused rewrite/answer pipeline with minimal LLM passes.
 
 - `humanize` now uses **1 main rewrite call** plus **optional 1 length-correction call**.
 - Most cleanup is deterministic JS (`humanizeText`) instead of extra model rounds.
-- `answer` now uses **a single conversational model call** with optional chat history.
+- `answer` now uses **a single conversational model call** with optional chat history and visible conversation thread in the UI.
 - Example selection is randomized each run to reduce repeated prompt fingerprints.
 - Word-count tolerance widened to **±20%** and enforced at most once.
 
@@ -18,14 +18,15 @@ Human-focused rewrite/answer pipeline with minimal LLM passes.
 npm run import:datasets
 ```
 
-2. Send imported records through your GPTZero workflow to label classes:
+2. Send imported records through your GPTZero workflow and label them into buckets:
    - `human`
-   - `mixed`
-   - `ai_paraphrased`
    - `ai`
+   - `ai_paraphrased`
+   - `ai_mixed`
+   - `ai_polished`
 
 3. Keep only trusted `human` rows as positive anchors.
-4. Use `mixed`, `ai_paraphrased`, `ai` rows as negative/counter anchors.
+4. Use all non-human classes as negative/counter anchors.
 
 > This repo includes source pointers in `data.js` and a dataset import script in `scripts/import-real-datasets.mjs`.
 
