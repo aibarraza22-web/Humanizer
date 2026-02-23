@@ -9,6 +9,7 @@ import { AIDEN_EXAMPLES, AI_COUNTER_EXAMPLES, BANNED, DRAMATIC_PHRASES, AI_OPENE
 
 const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MODEL = 'mistral-large-latest';
+const MIN_BURSTINESS = 0.42;
 
 // ═══════════════════════════════════════════════════════════════════
 //  HARD SCRUB — regex post-processor, runs on every LLM output
@@ -240,6 +241,28 @@ async function enforceWordCount(apiKey, text, targetWC) {
   }
 }
 
+async function enforceBurstiness(apiKey, text, targetWC) {
+  const currentBurst = calcBurstiness(text);
+  if (currentBurst >= MIN_BURSTINESS) return text;
+
+  const minWords = Math.floor(targetWC * 0.80);
+  const maxWords = Math.ceil(targetWC * 1.20);
+
+  const revised = await mistral(apiKey,
+    `Increase sentence-length variation so the output feels more naturally human.
+Current burstiness is ${currentBurst}. Target at least ${MIN_BURSTINESS}.
+Mix short, medium, and occasional longer lines while keeping the original meaning and voice.
+Keep it natural and personal. Do NOT use random fragments, weird punctuation, or awkward phrasing.
+Keep total length between ${minWords} and ${maxWords} words.
+Return ONLY the revised text.`,
+    text,
+    0.74,
+    Math.max(1200, maxWords * 5)
+  );
+
+  return revised;
+}
+
 // Build the full positive + negative example blocks for prompts
 function buildExampleBlocks(numPositive = 4, numNegative = 3) {
   const positiveBlock = shufflePick(AIDEN_EXAMPLES, numPositive)
@@ -371,6 +394,8 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
   const rewritePrompt = `Rewrite this text so it reads like a real person writing naturally.
 Keep the original meaning and roughly similar length.
 Use conversational flow, varied sentence lengths, and direct language.
+Require noticeable burstiness: mix short and medium sentences plus occasional longer ones, but keep every sentence natural.
+Make it feel personal and lively without sounding forced.
 Remove parenthetical asides unless they are essential factual data.
 Avoid list formatting, headers, and over-structured transitions.
 Avoid Quillbot-like synonym swaps and "academic polish" phrasing.
@@ -394,6 +419,14 @@ Return only the rewritten text.`;
     result = humanizeText(result);
   } else {
     log('3/3', `Length within tolerance (${wc(result)} words).`);
+  }
+
+  if (calcBurstiness(result) < MIN_BURSTINESS) {
+    log('3/3', `Boosting burstiness (${calcBurstiness(result)} → target ${MIN_BURSTINESS})...`);
+    result = await enforceBurstiness(apiKey, result, originalWordCount);
+    result = humanizeText(result);
+    result = await enforceWordCount(apiKey, result, originalWordCount);
+    result = humanizeText(result);
   }
 
   return {
@@ -441,6 +474,8 @@ export async function answerAsAiden(apiKey, question, styleProfile, onProgress, 
       role: 'system',
       content: `You are a normal helpful assistant. Sound human and conversational, not robotic.
 Answer directly, then explain briefly, in a way that still sounds strong after light humanization.
+Use bursty rhythm: blend short and medium lines with occasional longer ones, but keep it smooth and natural.
+Make the tone personal and lively, like a real person talking.
 Do not use list formatting unless the user asks.
 Do not hedge excessively or write like an essay.
 Avoid parenthetical asides and "over-polished" Quillbot phrasing.
