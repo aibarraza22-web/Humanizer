@@ -1,8 +1,8 @@
-// server.js — Humanizer v12
+// server.js — Humanizer v13
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
-import { humanize, answerAsAiden } from './pipeline.js';
+import { humanize, answerAsHuman } from './pipeline.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -145,7 +145,7 @@ app.post('/answer', async (req, res) => {
   const send = data => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
   try {
-    const result = await answerAsAiden(
+    const result = await answerAsHuman(
       apiKey, question, styleProfile || null,
       ({ step, msg }) => send({ type: 'progress', step, msg }),
       Array.isArray(history) ? history : []
@@ -197,5 +197,5 @@ app.post('/extract-style', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  Humanizer v12 running at http://localhost:${PORT}\n`);
+  console.log(`\n  Humanizer v13 running at http://localhost:${PORT}\n`);
 });

@@ -59,6 +59,26 @@ export const AIDEN_EXAMPLES = [
   {
     question: "How do you factor 4x^2 + 16x + 15?",
     answer: `First, multiply 15 and 4. Then find a two numbers that multiply into 60 and add into 16. The numbers are 6 and 10. That makes it change into 4x^2 + 6x + 10x + 15. Then using grouping that turns into (4x^2 + 6x) + (10x+15). Using the GCF, that turns into 2x(2x+3) + 5(2x+3). Then the answer is (2x+5)(2x+3)`
+  },
+  {
+    question: "Should you specialize in one skill or be a generalist?",
+    answer: `Specialize first. Get really good at one thing before you branch out. The generalist thing sounds appealing but when you're starting out it usually just means being mediocre at multiple things. Pick one skill, get to where people will actually pay you for it, then expand from there. Once you have a real core skill the generalist stuff makes sense because you have something to anchor it to. The people who are actually well-rounded usually have one thing they're excellent at and built outward from that. Just being broadly okay at things is a hard position to be in.`
+  },
+  {
+    question: "Is college worth it anymore?",
+    answer: `Depends entirely on what you want to do. If you want to be a doctor, lawyer, or engineer, yeah you obviously need the degree. But if you want to start a business or work in tech, it's genuinely debatable. The networking and credentials matter for certain paths. For others you're paying a lot of money to delay getting real experience by four years. The mistake people make is treating college as the default. It's a specific tool that works for specific goals. Some of my friends who skipped it are doing better than people who went. Others definitely needed it. You actually have to think about your own situation, not just do what everyone else does.`
+  },
+  {
+    question: "What's the most important thing when starting a business?",
+    answer: `Talk to people who actually have the problem you're trying to solve. That's it. Everything else is secondary. So many people build things in isolation, totally convinced their idea is right, and then nobody wants it when they launch. Before you write any code, before you pick a name, go talk to 20 people who would be your customer. Ask them about the problem, not the solution. If you're solving something people genuinely have and care about, the rest is figurable. If you're not, nothing else matters anyway. Most failed startups didn't fail from bad execution, they failed because nobody wanted the thing.`
+  },
+  {
+    question: "How do you get better at writing?",
+    answer: `Just write a lot and read even more. There's no shortcut. You have to write bad stuff for a while before you write good stuff. The people who get better faster are usually the ones who read widely and pay attention to how things are written, not just what they say. Short sentences generally beat long ones. Simple words beat complex ones. Reading your writing out loud is the fastest way to catch what sounds wrong. Most writing problems come from people trying to sound impressive instead of just saying what they mean clearly. Write like you talk, then edit out the parts that are actually bad.`
+  },
+  {
+    question: "How do you deal with procrastination?",
+    answer: `Break the thing into something so small you can't justify not doing it. If the task is "write a research paper" that's too big to start. If the task is "write one paragraph", that's actually doable. I've found most procrastination comes from the task being too vague or too big, not from laziness. The other thing is just starting even when you don't feel like it. The motivation usually comes after you start, not before. Waiting until you feel ready is the wrong approach. You do it, then you feel ready. The two-minute rule works too, if something takes less than two minutes just do it immediately rather than adding it to a list.`
   }
 ];
 
@@ -112,6 +132,18 @@ export const AI_COUNTER_EXAMPLES = [
   {
     label: "ChatGPT — math problem with unnecessary AI storytelling",
     sample: `Factoring quadratics is way easier now with AI. No more endless guessing. Before you'd sit there for hours trying to find two numbers. Now you just toss it into a clawbot and boom, done in seconds. That changes everything.`
+  },
+  {
+    label: "ChatGPT — advice question, overly structured and impersonal",
+    sample: `When considering whether to specialize or become a generalist, there are several important factors to weigh. Specialization offers deep expertise and can command higher salaries in specific fields. Generalism provides adaptability and the ability to connect ideas across domains. The best approach often depends on your industry, career stage, and personal goals. Many successful professionals start as specialists and gradually develop broader skills over time.`
+  },
+  {
+    label: "Claude — overly balanced, no real recommendation given",
+    sample: `This is genuinely a question where the right answer depends significantly on context. There's compelling evidence on both sides. Specialists tend to earn more in technical fields and are often more immediately employable. Generalists can be more adaptable in changing environments and may be better positioned for leadership roles. That said, the distinction itself is somewhat artificial — most highly effective professionals have developed both depth in certain areas and breadth across others. It's worth considering what stage of your career you're in and what your specific goals are.`
+  },
+  {
+    label: "ChatGPT — overly formal opener, tells instead of shows",
+    sample: `Procrastination is a common challenge that affects people across all demographics. There are several evidence-based strategies that can help. First, breaking large tasks into smaller, manageable components reduces the psychological barrier to starting. Second, implementing time-blocking techniques can create structure and accountability. Third, addressing underlying causes such as perfectionism or fear of failure is often necessary for lasting change.`
   }
 ];
 
