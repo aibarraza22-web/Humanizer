@@ -1,11 +1,13 @@
-// pipeline.js — Humanizer v15
-// Dataset: Human vs AI writing by Aiden vs ChatGPT vs Claude
-// AIDEN_EXAMPLES = all Aiden answers — write LIKE these
-// AI_COUNTER_EXAMPLES = ChatGPT + Claude answers — write NOTHING like these
-// hardScrub() = regex post-processor catching AI casual patterns
+// pipeline.js — Humanizer v13
+// Core: every output sounds like a real person, not an AI.
+// Use it like ChatGPT — ask anything, get back human-sounding text.
 
 import fetch from 'node-fetch';
-import { AIDEN_EXAMPLES, AI_COUNTER_EXAMPLES, BANNED, DRAMATIC_PHRASES, AI_OPENERS, CONTRACTION_MAP, FILLER_PHRASES, GPTZERO_STYLE_CLASSES } from './data.js';
+import {
+  AIDEN_EXAMPLES, AI_COUNTER_EXAMPLES,
+  BANNED, DRAMATIC_PHRASES, AI_OPENERS,
+  CONTRACTION_MAP, FILLER_PHRASES, GPTZERO_STYLE_CLASSES
+} from './data.js';
 
 const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
 const MODEL = 'mistral-large-latest';
@@ -13,7 +15,7 @@ const MIN_BURSTINESS = 0.42;
 
 // ═══════════════════════════════════════════════════════════════════
 //  HARD SCRUB — regex post-processor, runs on every LLM output
-//  Catches AI-trying-to-sound-casual patterns the model generates itself
+//  Catches AI-trying-to-sound-casual patterns the model generates
 // ═══════════════════════════════════════════════════════════════════
 function hardScrub(text) {
   let t = text;
@@ -56,7 +58,6 @@ function hardScrub(text) {
   t = t.replace(/\bNot (replacing|removing|eliminating|cutting|reducing)\s+([^.]+)\.\s+([A-Z][^.]+ing)\s+them\./g,
     "It's not about $1 $2. It's about $3 them.");
 
-
   // Semicolons often make model text feel overly formal
   t = t.replace(/;/g, '.');
 
@@ -66,6 +67,12 @@ function hardScrub(text) {
   // Subtle hedging removals
   t = t.replace(/\b(it seems|it appears|arguably|possibly|potentially|to some extent|in many ways)\b/gi, '');
   t = t.replace(/\b(might|may)\b/gi, 'can');
+
+  // AI opener phrases — strip sycophantic openers
+  t = t.replace(/^(Certainly|Absolutely|Of course|Sure thing|Great question|Excellent question)[,!]?\s*/im, '');
+  t = t.replace(/^(That'?s?\s+(a\s+)?(great|excellent|interesting|fascinating|wonderful)\s+(question|point|observation|topic))[.!]?\s*/im, '');
+  t = t.replace(/^(I'?d?\s+be\s+happy\s+to\s+(help|assist)[^.]*)[.!]?\s*/im, '');
+
   // Clean up
   t = t.replace(/\.\.+/g, '.');
   t = t.replace(/\s{2,}/g, ' ');
@@ -90,11 +97,10 @@ async function mistral(apiKey, system, user, temp = 0.85, maxTokens = 2048) {
   const data = await res.json();
   if (!res.ok) throw new Error(`Mistral error: ${data.message || data.error?.message || JSON.stringify(data).slice(0, 200)}`);
   if (!data.choices?.[0]) throw new Error(`Unexpected response: ${JSON.stringify(data).slice(0, 200)}`);
-  
-return data.choices[0].message.content.trim();
+  return data.choices[0].message.content.trim();
 }
 
-async function mistralMessages(apiKey, messages, temp = 0.8, maxTokens = 1200) {
+async function mistralMessages(apiKey, messages, temp = 0.8, maxTokens = 1400) {
   const res = await fetch(MISTRAL_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -185,7 +191,6 @@ function buildUserStyleBlock(profile) {
   return rules.length ? `\n━━ STYLE NOTES ━━\n${rules.map(r => `• ${r}`).join('\n')}` : '';
 }
 
-
 function shufflePick(items, count) {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -195,11 +200,13 @@ function shufflePick(items, count) {
   return copy.slice(0, Math.min(count, copy.length));
 }
 
+// FIXED: proper \\b escaping for RegExp constructor (was using \b = backspace char)
 function humanizeText(text) {
   let out = hardScrub(text);
 
   for (const [plain, contraction] of Object.entries(CONTRACTION_MAP)) {
-    const re = new RegExp(`\b${plain.replace(/ /g, '\s+')}\b`, 'gi');
+    const escaped = plain.replace(/ /g, '\\s+');
+    const re = new RegExp(`\\b${escaped}\\b`, 'gi');
     out = out.replace(re, contraction);
   }
 
@@ -210,7 +217,7 @@ function humanizeText(text) {
     significant: 'big', numerous: 'lots of'
   };
   for (const [formal, casual] of Object.entries(casualMap)) {
-    out = out.replace(new RegExp(`\b${formal}\b`, 'gi'), casual);
+    out = out.replace(new RegExp(`\\b${formal}\\b`, 'gi'), casual);
   }
 
   out = out.replace(/\b(on the other hand|that said|it is worth noting)\b/gi, '');
@@ -277,7 +284,42 @@ function buildExampleBlocks(numPositive = 4, numNegative = 3) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  STEP 2: Initial rewrite
+//  TARGETED CLEANUP — runs when quality gate fails
+//  Fixes specific AI patterns detected after initial rewrite
+// ═══════════════════════════════════════════════════════════════════
+async function targetedCleanup(apiKey, text, problems, targetWC) {
+  const fixes = [];
+
+  if (problems.banned.length > 0) {
+    fixes.push(`Replace these AI-flagged words with plain casual alternatives: ${problems.banned.slice(0, 6).join(', ')}`);
+  }
+  if (problems.aiOpeners.length > 0) {
+    const samples = problems.aiOpeners.slice(0, 2).map(s => `"${s.trim().slice(0, 55)}"`).join(', ');
+    fixes.push(`Rewrite sentence openings that read like AI — e.g. ${samples}`);
+  }
+  if (problems.claudeFound > 0) {
+    fixes.push('Remove hedging phrases like "that said", "on the other hand", "it\'s worth noting"');
+  }
+  if (problems.longSentences.length > 1) {
+    fixes.push(`Break up ${problems.longSentences.length} overly long sentences (>17 words) into shorter ones`);
+  }
+  if (problems.dramatic.length > 0) {
+    fixes.push(`Replace dramatic AI buzzwords: ${problems.dramatic.slice(0, 4).join(', ')}`);
+  }
+
+  if (!fixes.length) return text;
+
+  const minW = Math.floor(targetWC * 0.85);
+  const maxW = Math.ceil(targetWC * 1.15);
+
+  return await mistral(apiKey,
+    `Fix these specific AI-sounding issues while keeping the same meaning and casual human voice:\n${fixes.map(f => `• ${f}`).join('\n')}\n\nLength ${minW}–${maxW} words. Return ONLY the fixed text.`,
+    text, 0.72, maxW * 4
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  INITIAL REWRITE — full example-block rewrite (used by humanize)
 // ═══════════════════════════════════════════════════════════════════
 async function initialRewrite(apiKey, inputText, inputType, strength, styleProfile) {
   const wordTarget = wc(inputText);
@@ -385,45 +427,35 @@ export async function humanize(apiKey, inputText, strength, styleProfile, onProg
 
   const originalWordCount = wc(inputText);
   const inputType = detectInputType(inputText);
-  const temps = { aggressive: 0.88, standard: 0.78, subtle: 0.68 };
 
-  log('1/3', `Rewriting (${inputType}) with low-structure prompt...`);
-  const { positiveBlock, negativeBlock } = buildExampleBlocks(4, 3);
-  const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
-
-  const rewritePrompt = `Rewrite this text so it reads like a real person writing naturally.
-Keep the original meaning and roughly similar length.
-Use conversational flow, varied sentence lengths, and direct language.
-Keep answers simple, direct, and clear. Prefer plain words over polished or academic wording.
-Require noticeable burstiness: mix short and medium sentences plus occasional longer ones, but keep every sentence natural.
-Make it feel personal and lively without sounding forced.
-Remove parenthetical asides unless they are essential factual data.
-Avoid list formatting, headers, and over-structured transitions.
-Avoid Quillbot-like synonym swaps and "academic polish" phrasing.
-Avoid these AI-like patterns:
-${negativeBlock}
-Use this human style as anchor:
-${positiveBlock}
-${userStyleBlock}
-Return only the rewritten text.`;
-
-  let result = await mistral(apiKey, rewritePrompt, inputText, temps[strength || 'aggressive'], 2600);
-
-  log('2/3', 'Applying deterministic human post-processing...');
+  log('1/3', `Rewriting (${inputType}) with full example prompt...`);
+  let result = await initialRewrite(apiKey, inputText, inputType, strength, styleProfile);
   result = humanizeText(result);
 
+  // Quality gate — check for remaining AI patterns and fix them
+  const problems = detectProblems(result);
+  if (problems.score > 12 || problems.banned.length > 0 || problems.aiOpeners.length > 1) {
+    log('2/3', `Quality check: ${problems.score} AI score — running cleanup pass...`);
+    result = await targetedCleanup(apiKey, result, problems, originalWordCount);
+    result = humanizeText(result);
+  } else {
+    log('2/3', `Quality check passed (score: ${problems.score}).`);
+  }
+
+  // Word count check
   const min = Math.floor(originalWordCount * 0.80);
   const max = Math.ceil(originalWordCount * 1.20);
   if (wc(result) < min || wc(result) > max) {
-    log('3/3', `One final length correction (${wc(result)} words)...`);
+    log('3/3', `Length correction (${wc(result)} → ~${originalWordCount} words)...`);
     result = await enforceWordCount(apiKey, result, originalWordCount);
     result = humanizeText(result);
   } else {
-    log('3/3', `Length within tolerance (${wc(result)} words).`);
+    log('3/3', `Length OK (${wc(result)} words).`);
   }
 
+  // Burstiness check
   if (calcBurstiness(result) < MIN_BURSTINESS) {
-    log('3/3', `Boosting burstiness (${calcBurstiness(result)} → target ${MIN_BURSTINESS})...`);
+    log('3/3', `Boosting rhythm (burstiness ${calcBurstiness(result)} → target ${MIN_BURSTINESS})...`);
     result = await enforceBurstiness(apiKey, result, originalWordCount);
     result = humanizeText(result);
     result = await enforceWordCount(apiKey, result, originalWordCount);
@@ -441,66 +473,100 @@ Return only the rewritten text.`;
       originalWordCount,
       outputWordCount: wc(result),
       wordCountDelta: Math.round((wc(result) - originalWordCount) / originalWordCount * 100) + '%',
-      humanExampleSources: ['Aiden dataset']
+      humanExampleSources: ['Human writing dataset']
     }
   };
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  ANSWER AS HUMAN EXPORT
+//  ANSWER AS HUMAN — general purpose AI that always sounds human
+//  Works like ChatGPT: ask anything, get back human-sounding text.
 // ═══════════════════════════════════════════════════════════════════
-
-export async function answerAsAiden(apiKey, question, styleProfile, onProgress, chatHistory = []) {
+export async function answerAsHuman(apiKey, message, styleProfile, onProgress, chatHistory = []) {
   const log = (step, msg) => {
     console.log(`  [${step}] ${msg}`);
     if (onProgress) onProgress({ step, msg });
   };
 
   if (!apiKey) throw new Error('No API key provided');
-  if (!question?.trim()) throw new Error('No question provided');
+  if (!message?.trim()) throw new Error('No message provided');
 
-  log('1/2', 'Building conversational context...');
+  log('1/2', 'Generating response...');
   const { positiveBlock, negativeBlock } = buildExampleBlocks(3, 2);
   const userStyleBlock = styleProfile ? buildUserStyleBlock(styleProfile) : '';
 
   const historyMessages = Array.isArray(chatHistory)
     ? chatHistory
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-      .slice(-10)
+      .slice(-12)
       .map(m => ({ role: m.role, content: m.content.trim() }))
     : [];
 
-  const messages = [
-    {
-      role: 'system',
-      content: `You are a normal helpful assistant. Sound human and conversational, not robotic.
-Answer directly. Keep it concise, simple, and concrete.
-Use plain words, short paragraphs, and no filler.
-Do not add emotional language, storytelling, rhetorical commentary, or preachy tone.
-Do not over-explain. Do not add interpretation beyond the user request.
-Format answers in worksheet style by default:
-• Question restated briefly
-• Direct answer in 2–5 sentences
-• Citation on its own line when needed
-Before answering long sections, first ask: "Do you want this concise or slightly expanded?" Then proceed concisely by default.
-Use bullets only when asked or when structure is required.
-Avoid parenthetical asides and over-polished phrasing.
-When relevant, keep style closest to examples that would classify as "human", and avoid styles that read like ai, ai_paraphrased, ai_mixed, or ai_polished.
-GPTZero-style classes to optimize for: ${GPTZERO_STYLE_CLASSES.join(', ')}.
-Avoid these AI patterns:
-${negativeBlock}
-Human voice anchors:
+  const systemPrompt = `You are a helpful AI assistant. Answer any question helpfully and accurately.
+
+Sound like a real person having a conversation — not like an AI writing an essay or a formal report.
+
+VOICE RULES:
+• Be direct. Get to the point without warming up.
+• Take positions when asked. Wishy-washy "it depends" answers are only okay when genuinely true.
+• Use plain everyday language. "a lot" not "a significant number of". "because" not "due to the fact that".
+• Vary sentence length naturally — short punchy ones mixed with medium ones.
+• Use "I" naturally when giving opinions. "I think", "I'd say", "my take is".
+• Don't restate the question before answering — just answer it.
+• No closing paragraph that summarizes what you just said.
+• Contractions are fine — use them freely.
+• Answer anything: factual, technical, opinion, creative, code, math — all of it.
+
+NEVER START WITH:
+• "Certainly!", "Of course!", "Absolutely!", "Great question!" — don't do this
+• "That's a fascinating/interesting/great point" — just respond
+• "I'd be happy to help with that" — just help
+
+NEVER USE:
+• "It's worth noting that..." — just say it
+• "In conclusion, ..." — don't summarize
+• "On the other hand..." — commit to an answer
+• "Furthermore..." / "Moreover..." — just keep going
+• Numbered lists when prose would flow better
+• "This is a nuanced/complex topic" — just explain it
+
+FOR CODE:
+• Give the actual working code first, then brief explanation
+• Use code blocks with language labels
+• Keep it minimal and working
+
+FOR FACTUAL QUESTIONS:
+• Lead with the direct answer
+• Add relevant context only if it genuinely adds value
+
+FOR OPINIONS:
+• Give your actual take, not a "some say X, others say Y" non-answer
+• If you genuinely don't know, say "I'm not sure, but..." — don't fake certainty
+
+HUMAN VOICE ANCHORS — aim for this natural style:
 ${positiveBlock}
-${userStyleBlock}`
-    },
+
+AI PATTERNS TO AVOID — never write like this:
+${negativeBlock}
+${userStyleBlock}`;
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
     ...historyMessages,
-    { role: 'user', content: question }
+    { role: 'user', content: message }
   ];
 
-  log('2/2', 'Generating answer (single model pass)...');
-  const isLongForm = wc(question) > 120;
-  let result = await mistralMessages(apiKey, messages, isLongForm ? 0.76 : 0.82, isLongForm ? 1600 : 1000);
+  log('2/2', 'Applying human voice filter...');
+  const isLongForm = wc(message) > 100;
+  let result = await mistralMessages(
+    apiKey, messages,
+    isLongForm ? 0.76 : 0.82,
+    isLongForm ? 1800 : 1300
+  );
+
+  // Apply full human cleanup
   result = hardScrub(result).replace(/\s{2,}/g, ' ').trim();
+  result = humanizeText(result);
 
   return {
     text: result,
@@ -512,3 +578,6 @@ ${userStyleBlock}`
     }
   };
 }
+
+// Backward compatibility alias
+export { answerAsHuman as answerAsAiden };

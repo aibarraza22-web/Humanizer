@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Humanizer v12</title>
+<title>Humanizer — AI Chat That Sounds Human</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Epilogue:ital,wght@0,300;0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -15,10 +15,12 @@
 }
 body{font-family:'Epilogue',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6;overflow-x:hidden}
 
-header{display:flex;align-items:center;justify-content:space-between;padding:20px 32px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(108,99,255,0.06) 0%,transparent 100%);flex-wrap:wrap;gap:12px}
+/* ─── Header ───────────────────────────────────────────────────── */
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(108,99,255,0.06) 0%,transparent 100%);flex-wrap:wrap;gap:10px}
 .logo{display:flex;align-items:baseline;gap:9px}
-.logo h1{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;letter-spacing:-0.04em}
+.logo h1{font-family:'Syne',sans-serif;font-size:1.35rem;font-weight:800;letter-spacing:-0.04em}
 .logo h1 em{font-style:normal;background:linear-gradient(135deg,#6c63ff,#ff79c6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo-tag{font-size:0.72rem;color:#555580;font-style:italic;font-family:'Epilogue',sans-serif;padding-left:2px}
 .chip{font-family:'JetBrains Mono',monospace;font-size:0.58rem;padding:2px 7px;border:1px solid var(--border2);border-radius:20px;color:#555580;letter-spacing:0.1em}
 .key-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .key-wrap{display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:7px 12px}
@@ -32,16 +34,97 @@ header{display:flex;align-items:center;justify-content:space-between;padding:20p
 .btn-upgrade-sm{font-family:'Syne',sans-serif;font-size:0.65rem;font-weight:700;padding:4px 10px;border:1px solid var(--accent);border-radius:20px;background:transparent;color:var(--accent);cursor:pointer;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.08em}
 .btn-upgrade-sm:hover{background:var(--glow)}
 
-.app{max-width:1160px;margin:0 auto;padding:24px 28px 80px;display:flex;flex-direction:column;gap:18px}
+/* ─── App layout ────────────────────────────────────────────────── */
+.app{max-width:1100px;margin:0 auto;padding:20px 24px 80px;display:flex;flex-direction:column;gap:16px}
 
+/* ─── Tabs ──────────────────────────────────────────────────────── */
 .tabs{display:flex;border-bottom:1px solid var(--border)}
 .tab{padding:8px 18px;background:transparent;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#555580;cursor:pointer;transition:all 0.15s}
 .tab:hover{color:var(--text2)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 .panel{display:none}
-.panel.active{display:flex;flex-direction:column;gap:16px;padding-top:18px}
+.panel.active{display:flex;flex-direction:column;gap:14px;padding-top:16px}
 
-/* steps */
+/* ─── Chat Tab ──────────────────────────────────────────────────── */
+.chat-intro{font-size:0.83rem;color:#555580;line-height:1.65;max-width:560px}
+.chat-intro strong{color:var(--text2)}
+
+.mode-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.mode-btn{padding:7px 16px;border:1px solid var(--border);border-radius:20px;background:transparent;font-family:'Syne',sans-serif;font-size:0.7rem;font-weight:700;letter-spacing:0.06em;color:#555580;cursor:pointer;transition:all 0.15s}
+.mode-btn:hover{border-color:var(--border2);color:var(--text2)}
+.mode-btn.active{border-color:var(--accent);color:var(--accent);background:var(--glow)}
+
+/* Chat window */
+.chat-window{border:1px solid var(--border);border-radius:var(--r2);background:var(--s1);overflow:hidden;display:flex;flex-direction:column}
+.chat-messages{min-height:340px;max-height:480px;overflow-y:auto;padding:18px 16px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
+.chat-empty{color:var(--dim);font-style:italic;font-size:0.88rem;text-align:center;padding:60px 20px;line-height:1.8}
+.chat-empty small{display:block;font-size:0.76rem;margin-top:8px;color:#333348}
+
+/* Message bubbles */
+.msg{display:flex;flex-direction:column;max-width:84%}
+.msg.user{align-self:flex-end;align-items:flex-end}
+.msg.ai{align-self:flex-start;align-items:flex-start}
+.msg-bubble{padding:11px 15px;font-size:0.875rem;line-height:1.72;white-space:pre-wrap;word-break:break-word}
+.msg.user .msg-bubble{background:var(--accent);color:#fff;border-radius:14px 14px 3px 14px}
+.msg.ai .msg-bubble{background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:14px 14px 14px 3px}
+.msg.ai .msg-bubble code{font-family:'JetBrains Mono',monospace;font-size:0.82em;background:var(--s3);padding:1px 5px;border-radius:3px}
+.msg.ai .msg-bubble pre{background:var(--s3);border:1px solid var(--border);border-radius:6px;padding:12px;margin:8px 0;overflow-x:auto}
+.msg.ai .msg-bubble pre code{background:none;padding:0;font-size:0.8rem}
+.msg-footer{display:flex;align-items:center;gap:7px;margin-top:5px;padding:0 3px}
+.human-badge{font-family:'JetBrains Mono',monospace;font-size:0.58rem;padding:2px 8px;border-radius:10px;background:rgba(80,250,123,0.1);color:var(--green);border:1px solid rgba(80,250,123,0.22)}
+.msg-copy-btn{font-size:0.65rem;padding:2px 8px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--dim);cursor:pointer;font-family:'Epilogue',sans-serif;transition:all 0.15s}
+.msg-copy-btn:hover{border-color:var(--border2);color:var(--text2)}
+
+/* Typing indicator */
+.typing-wrap{padding:0 16px 14px;display:none}
+.typing-wrap.show{display:flex}
+.typing-indicator{display:flex;gap:5px;align-items:center;padding:10px 16px;background:var(--s2);border:1px solid var(--border);border-radius:14px 14px 14px 3px}
+.typing-dot{width:6px;height:6px;border-radius:50%;background:var(--dim);animation:tdot 1.4s infinite}
+.typing-dot:nth-child(2){animation-delay:.22s}
+.typing-dot:nth-child(3){animation-delay:.44s}
+@keyframes tdot{0%,60%,100%{opacity:.3;transform:scale(1)}30%{opacity:1;transform:scale(1.2)}}
+
+/* Chat input area */
+.chat-compose{display:flex;gap:8px;align-items:flex-end;padding:12px 14px;border-top:1px solid var(--border);background:var(--s2)}
+.chat-input{flex:1;padding:10px 13px;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.88rem;line-height:1.6;resize:none;outline:none;min-height:42px;max-height:130px;overflow-y:auto;transition:border-color 0.15s}
+.chat-input:focus{border-color:var(--accent)}
+.chat-input::placeholder{color:var(--dim);font-style:italic}
+.btn-send{padding:10px 18px;background:linear-gradient(135deg,#6c63ff,#8b5cf6);border:none;border-radius:var(--r);color:#fff;font-family:'Syne',sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;flex-shrink:0}
+.btn-send:hover{opacity:.88;box-shadow:0 4px 18px rgba(108,99,255,.35)}
+.btn-send:disabled{opacity:.28;cursor:not-allowed}
+
+.chat-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* Answer mode (worksheet) */
+.answer-mode{display:none;flex-direction:column;gap:12px}
+.answer-mode.active{display:flex}
+.answer-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;background:var(--s1)}
+.answer-out{min-height:200px;padding:16px;font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.76;color:var(--text2);white-space:pre-wrap;cursor:default}
+.answer-placeholder{color:var(--dim);font-style:italic}
+.q-input{width:100%;padding:14px 16px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.6;resize:vertical;outline:none;min-height:80px}
+.q-input:focus{border-color:var(--accent)}
+.q-input::placeholder{color:var(--dim);font-style:italic}
+
+/* ─── Score cards ───────────────────────────────────────────────── */
+.score-row{display:flex;gap:7px;flex-wrap:wrap}
+.scard{flex:1;min-width:90px;padding:9px 12px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r)}
+.sc-l{font-family:'JetBrains Mono',monospace;font-size:0.55rem;text-transform:uppercase;letter-spacing:0.1em;color:#555580;margin-bottom:3px}
+.sc-v{font-family:'Syne',sans-serif;font-size:0.8rem;font-weight:700}
+.g{color:var(--green)}.m{color:var(--yellow)}.b{color:var(--red)}
+
+/* ─── Controls ──────────────────────────────────────────────────── */
+.controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.sel-w{position:relative}
+select{appearance:none;padding:9px 28px 9px 12px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.82rem;outline:none;cursor:pointer}
+select:focus{border-color:var(--accent)}
+.sel-w::after{content:'▾';position:absolute;right:9px;top:50%;transform:translateY(-50%);color:#555580;font-size:0.62rem;pointer-events:none}
+.btn-p{flex:1;padding:10px 20px;background:linear-gradient(135deg,#6c63ff,#8b5cf6);border:none;border-radius:var(--r);color:#fff;font-family:'Syne',sans-serif;font-size:0.83rem;font-weight:700;cursor:pointer;transition:opacity 0.15s,box-shadow 0.15s}
+.btn-p:hover{opacity:.88;box-shadow:0 4px 20px rgba(108,99,255,.35)}
+.btn-p:disabled{opacity:.28;cursor:not-allowed}
+.btn-g{padding:9px 15px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:#555580;font-family:'Epilogue',sans-serif;font-size:0.82rem;cursor:pointer;transition:all 0.15s}
+.btn-g:hover{border-color:var(--border2);color:var(--text2)}
+
+/* ─── Steps ─────────────────────────────────────────────────────── */
 .steps{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
 .step{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:0.64rem;color:#555580;transition:color 0.3s}
 .step.active{color:var(--accent)}
@@ -51,7 +134,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:20p
 .step.done .sdot{border-color:var(--green);background:rgba(80,250,123,0.1);color:var(--green)}
 .sline{width:14px;height:1px;background:var(--border);margin:0 2px;flex-shrink:0}
 
-/* editors */
+/* ─── Editors ───────────────────────────────────────────────────── */
 .egrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:660px){.egrid{grid-template-columns:1fr}}
 .ecol{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;background:var(--s1)}
@@ -63,38 +146,16 @@ textarea{flex:1;width:100%;min-height:320px;padding:16px;background:transparent;
 textarea::placeholder{color:var(--dim);font-style:italic}
 textarea[readonly]{cursor:default;color:var(--text2)}
 
-/* score cards */
-.score-row{display:flex;gap:7px;flex-wrap:wrap}
-.scard{flex:1;min-width:100px;padding:9px 12px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r)}
-.sc-l{font-family:'JetBrains Mono',monospace;font-size:0.55rem;text-transform:uppercase;letter-spacing:0.1em;color:#555580;margin-bottom:3px}
-.sc-v{font-family:'Syne',sans-serif;font-size:0.8rem;font-weight:700}
-.g{color:var(--green)}.m{color:var(--yellow)}.b{color:var(--red)}
-
-/* controls */
-.controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-.sel-w{position:relative}
-select{appearance:none;padding:9px 28px 9px 12px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.82rem;outline:none;cursor:pointer}
-select:focus{border-color:var(--accent)}
-.sel-w::after{content:'▾';position:absolute;right:9px;top:50%;transform:translateY(-50%);color:#555580;font-size:0.62rem;pointer-events:none}
-.btn-p{flex:1;padding:10px 20px;background:linear-gradient(135deg,#6c63ff,#8b5cf6);border:none;border-radius:var(--r);color:#fff;font-family:'Syne',sans-serif;font-size:0.83rem;font-weight:700;cursor:pointer;transition:opacity 0.15s,box-shadow 0.15s}
-.btn-p:hover{opacity:0.88;box-shadow:0 4px 20px rgba(108,99,255,0.35)}
-.btn-p:disabled{opacity:0.28;cursor:not-allowed}
-.btn-g{padding:9px 15px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:#555580;font-family:'Epilogue',sans-serif;font-size:0.82rem;cursor:pointer;transition:all 0.15s}
-.btn-g:hover{border-color:var(--border2);color:var(--text2)}
-
-/* progress */
+/* ─── Progress + Log ─────────────────────────────────────────────── */
 .prog-track{height:2px;background:var(--s3);border-radius:2px;overflow:hidden;opacity:0;transition:opacity 0.2s}
 .prog-track.on{opacity:1}
 .prog-fill{height:100%;width:0%;background:linear-gradient(90deg,#6c63ff,#ff79c6);transition:width 0.5s ease;border-radius:2px}
-
-/* log */
-.log-panel{background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;max-height:160px;overflow-y:auto;display:none}
+.log-panel{background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;max-height:130px;overflow-y:auto;display:none}
 .log-panel.show{display:block}
 .log-line{font-family:'JetBrains Mono',monospace;font-size:0.66rem;color:#555580;line-height:1.7;display:flex;gap:8px}
 .log-line.active{color:var(--text2)}
 .log-line.done{color:var(--green)}
 .log-step{color:var(--accent);flex-shrink:0}
-
 .status{display:flex;align-items:center;gap:7px;min-height:17px;font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:#555580}
 .s-dot{width:5px;height:5px;border-radius:50%;background:#555580;flex-shrink:0;transition:background 0.2s}
 .status.working .s-dot{background:var(--accent);animation:blink 1s infinite}
@@ -102,84 +163,68 @@ select:focus{border-color:var(--accent)}
 .status.ok{color:var(--green)}
 .status.err .s-dot{background:var(--red)}
 .status.err{color:var(--red)}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.25}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
 
-/* examples panel */
-.ex-panel{padding:14px 16px;background:rgba(108,99,255,0.05);border:1px solid rgba(108,99,255,0.2);border-radius:var(--r);display:none}
+/* ─── Examples panel ─────────────────────────────────────────────── */
+.ex-panel{padding:14px 16px;background:rgba(108,99,255,.05);border:1px solid rgba(108,99,255,.2);border-radius:var(--r);display:none}
 .ex-panel.show{display:block}
-.ex-title{font-family:'JetBrains Mono',monospace;font-size:0.58rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--accent);margin-bottom:10px}
-.ex-item{padding:8px 0;border-bottom:1px solid rgba(108,99,255,0.1);font-size:0.79rem;color:var(--text2);line-height:1.62}
+.ex-title{font-family:'JetBrains Mono',monospace;font-size:0.58rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);margin-bottom:10px}
+.ex-item{padding:8px 0;border-bottom:1px solid rgba(108,99,255,.1);font-size:0.79rem;color:var(--text2);line-height:1.62}
 .ex-item:last-child{border-bottom:none}
-.ex-tag{font-family:'JetBrains Mono',monospace;font-size:0.55rem;padding:1px 6px;border-radius:10px;background:rgba(108,99,255,0.15);color:var(--accent);margin-right:6px}
+.ex-tag{font-family:'JetBrains Mono',monospace;font-size:0.55rem;padding:1px 6px;border-radius:10px;background:rgba(108,99,255,.15);color:var(--accent);margin-right:6px}
 
-/* answer tab */
-.answer-box{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;background:var(--s1)}
-.answer-out{min-height:200px;padding:16px;font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.76;color:var(--text2);white-space:pre-wrap;cursor:default}
-.thread{border:1px solid var(--border);border-radius:var(--r2);background:var(--s1);padding:12px;max-height:280px;overflow:auto;display:flex;flex-direction:column;gap:8px}
-.thread-item{padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--s2)}
-.thread-role{font-family:'JetBrains Mono',monospace;font-size:0.58rem;text-transform:uppercase;letter-spacing:0.09em;color:#8a8ab3;margin-bottom:4px}
-.thread-item.user .thread-role{color:#7aa2ff}
-.thread-item.assistant .thread-role{color:#8bffb1}
-.thread-text{font-size:0.86rem;line-height:1.6;color:var(--text2);white-space:pre-wrap}
-.answer-placeholder{color:var(--dim);font-style:italic}
-.q-input{width:100%;padding:14px 16px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.9rem;line-height:1.6;resize:vertical;outline:none;min-height:80px}
-.q-input:focus{border-color:var(--accent)}
-.q-input::placeholder{color:var(--dim);font-style:italic}
-.answer-mode{display:none}
-.answer-mode.active{display:flex}
-
-/* style tab */
-.style-desc{font-size:0.83rem;color:#555580;line-height:1.65;max-width:580px}
+/* ─── Style tab ─────────────────────────────────────────────────── */
+.style-desc{font-size:.83rem;color:#555580;line-height:1.65;max-width:580px}
 .meth-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.meth-btn{padding:12px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--s1);color:#555580;font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;cursor:pointer;transition:all 0.15s;text-align:center}
+.meth-btn{padding:12px 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--s1);color:#555580;font-family:'Syne',sans-serif;font-size:.72rem;font-weight:700;cursor:pointer;transition:all 0.15s;text-align:center}
 .meth-btn:hover{border-color:var(--border2);color:var(--text2)}
 .meth-btn.active{border-color:var(--accent);color:var(--accent);background:var(--glow)}
 .sblock{display:none;flex-direction:column;gap:13px}
 .sblock.active{display:flex}
 .field{display:flex;flex-direction:column;gap:5px}
-.flabel{font-family:'Syne',sans-serif;font-size:0.73rem;font-weight:700;color:var(--text2)}
-.fhint{font-size:0.72rem;color:#555580;line-height:1.5}
-.sta{padding:12px 14px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:0.88rem;line-height:1.68;resize:vertical;outline:none;transition:border-color 0.15s;min-height:130px}
+.flabel{font-family:'Syne',sans-serif;font-size:.73rem;font-weight:700;color:var(--text2)}
+.fhint{font-size:.72rem;color:#555580;line-height:1.5}
+.sta{padding:12px 14px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'Epilogue',sans-serif;font-size:.88rem;line-height:1.68;resize:vertical;outline:none;transition:border-color 0.15s;min-height:130px}
 .sta:focus{border-color:var(--accent)}
 .sta::placeholder{color:var(--dim);font-style:italic}
 .chips{display:flex;gap:5px;flex-wrap:wrap}
 .chips input[type=radio]{display:none}
-.chips input[type=radio]+label{padding:4px 11px;border:1px solid var(--border);border-radius:20px;font-size:0.73rem;cursor:pointer;color:#555580;transition:all 0.15s;font-family:'Epilogue',sans-serif;user-select:none}
+.chips input[type=radio]+label{padding:4px 11px;border:1px solid var(--border);border-radius:20px;font-size:.73rem;cursor:pointer;color:#555580;transition:all 0.15s;font-family:'Epilogue',sans-serif;user-select:none}
 .chips input[type=radio]:checked+label{background:var(--glow);border-color:var(--accent);color:var(--accent)}
 .style-bar{padding:12px 15px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.sbadge{font-family:'JetBrains Mono',monospace;font-size:0.66rem;padding:3px 10px;border-radius:20px;border:1px solid var(--border2);color:#555580}
-.sbadge.set{border-color:rgba(80,250,123,0.35);color:var(--green);background:rgba(80,250,123,0.07)}
-.btn-clear{padding:5px 11px;border:1px solid rgba(255,85,85,0.3);border-radius:var(--r);background:transparent;color:var(--red);font-size:0.7rem;cursor:pointer;font-family:'Epilogue',sans-serif;transition:all 0.15s}
-.btn-clear:hover{background:rgba(255,85,85,0.08)}
-.btn-save{padding:9px 18px;border:1px solid var(--border2);border-radius:var(--r);background:var(--s3);color:var(--text2);font-family:'Syne',sans-serif;font-size:0.76rem;font-weight:700;cursor:pointer;transition:all 0.15s;align-self:flex-start}
+.sbadge{font-family:'JetBrains Mono',monospace;font-size:.66rem;padding:3px 10px;border-radius:20px;border:1px solid var(--border2);color:#555580}
+.sbadge.set{border-color:rgba(80,250,123,.35);color:var(--green);background:rgba(80,250,123,.07)}
+.btn-clear{padding:5px 11px;border:1px solid rgba(255,85,85,.3);border-radius:var(--r);background:transparent;color:var(--red);font-size:.7rem;cursor:pointer;font-family:'Epilogue',sans-serif;transition:all 0.15s}
+.btn-clear:hover{background:rgba(255,85,85,.08)}
+.btn-save{padding:9px 18px;border:1px solid var(--border2);border-radius:var(--r);background:var(--s3);color:var(--text2);font-family:'Syne',sans-serif;font-size:.76rem;font-weight:700;cursor:pointer;transition:all 0.15s;align-self:flex-start}
 .btn-save:hover{border-color:var(--accent);color:var(--accent)}
-.btn-save:disabled{opacity:0.35;cursor:not-allowed}
+.btn-save:disabled{opacity:.35;cursor:not-allowed}
 
-/* tips */
+/* ─── Tips tab ──────────────────────────────────────────────────── */
 .tips-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 @media(max-width:560px){.tips-grid{grid-template-columns:1fr}}
 .tip{padding:15px 17px;background:var(--s1);border:1px solid var(--border);border-radius:var(--r)}
-.tip-n{font-family:'Syne',sans-serif;font-size:0.62rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
-.tip h3{font-family:'Syne',sans-serif;font-size:0.8rem;font-weight:700;margin-bottom:4px}
-.tip p{font-size:0.77rem;color:#555580;line-height:1.6}
+.tip-n{font-family:'Syne',sans-serif;font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.tip h3{font-family:'Syne',sans-serif;font-size:.8rem;font-weight:700;margin-bottom:4px}
+.tip p{font-size:.77rem;color:#555580;line-height:1.6}
 
-/* upgrade modal */
-.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center}
+/* ─── Upgrade modal ─────────────────────────────────────────────── */
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
 .modal-overlay.show{display:flex}
 .modal{background:var(--s1);border:1px solid var(--border2);border-radius:var(--r2);padding:28px 32px;max-width:680px;width:90%;max-height:90vh;overflow-y:auto}
 .modal h2{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;margin-bottom:6px}
-.modal .modal-sub{font-size:0.8rem;color:#555580;margin-bottom:18px;line-height:1.5}
+.modal .modal-sub{font-size:.8rem;color:#555580;margin-bottom:18px;line-height:1.5}
 .plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(max-width:500px){.plan-grid{grid-template-columns:1fr}}
 .plan-card{padding:16px;border:1px solid var(--border);border-radius:var(--r);background:var(--s2);display:flex;flex-direction:column;gap:6px}
 .plan-card.current{border-color:var(--green)}
-.plan-name{font-family:'Syne',sans-serif;font-size:0.85rem;font-weight:700}
+.plan-name{font-family:'Syne',sans-serif;font-size:.85rem;font-weight:700}
 .plan-price{font-family:'JetBrains Mono',monospace;font-size:1.1rem;font-weight:700;color:var(--accent)}
-.plan-uses{font-size:0.75rem;color:#555580}
-.btn-plan{margin-top:8px;padding:8px 14px;border:1px solid var(--accent);border-radius:var(--r);background:transparent;color:var(--accent);font-family:'Syne',sans-serif;font-size:0.72rem;font-weight:700;cursor:pointer;transition:all 0.15s}
+.plan-uses{font-size:.75rem;color:#555580}
+.btn-plan{margin-top:8px;padding:8px 14px;border:1px solid var(--accent);border-radius:var(--r);background:transparent;color:var(--accent);font-family:'Syne',sans-serif;font-size:.72rem;font-weight:700;cursor:pointer;transition:all 0.15s}
 .btn-plan:hover{background:var(--glow)}
 .btn-plan.active-plan{border-color:var(--green);color:var(--green);cursor:default}
-.modal-beta{font-size:0.7rem;color:var(--yellow);margin-top:14px;line-height:1.5;padding:8px 12px;background:rgba(241,250,140,0.06);border:1px solid rgba(241,250,140,0.15);border-radius:var(--r)}
+.modal-beta{font-size:.7rem;color:var(--yellow);margin-top:14px;line-height:1.5;padding:8px 12px;background:rgba(241,250,140,.06);border:1px solid rgba(241,250,140,.15);border-radius:var(--r)}
 .modal-close{position:absolute;top:12px;right:16px;background:none;border:none;color:#555580;font-size:1.2rem;cursor:pointer}
 .modal-close:hover{color:var(--text)}
 
@@ -193,7 +238,8 @@ select:focus{border-color:var(--accent)}
 <header>
   <div class="logo">
     <h1>Human<em>izer</em></h1>
-    <span class="chip">v12</span>
+    <span class="chip">v13</span>
+    <span class="logo-tag">AI that sounds human</span>
   </div>
   <div class="usage-row">
     <span class="usage-badge" id="usageBadge">-- uses left</span>
@@ -210,26 +256,103 @@ select:focus{border-color:var(--accent)}
 
 <div class="app">
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('answer',this)">Answer as Human</button>
+    <button class="tab active" onclick="switchTab('answer',this)">Chat</button>
     <button class="tab" onclick="switchTab('main',this)">Humanize</button>
-    <button class="tab" onclick="switchTab('style',this)">Writing Style</button>
+    <button class="tab" onclick="switchTab('style',this)">My Voice</button>
     <button class="tab" onclick="switchTab('tips',this)">Tips</button>
   </div>
 
-  <!-- HUMANIZE TAB -->
+  <!-- ════════════════════════════════════════════════════════════
+       CHAT TAB — primary product
+       Use it like ChatGPT. Every response sounds human.
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="tab-answer" class="panel active">
+    <div class="chat-intro">
+      <strong>Chat with an AI that always sounds human.</strong> Ask anything — questions, essays, code, opinions — every answer comes back sounding like a real person wrote it, not an AI.
+    </div>
+
+    <div class="mode-row">
+      <button class="mode-btn active" id="answerModeSingleBtn" onclick="switchAnswerMode('single',this)">💬 Chat</button>
+      <button class="mode-btn" id="answerModeWorksheetBtn" onclick="switchAnswerMode('worksheet',this)">📝 Worksheet</button>
+    </div>
+
+    <!-- ── Chat mode ─────────────────────────────────────────────── -->
+    <div id="answerModeSingle" class="answer-mode active">
+      <div class="chat-window">
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-empty">
+            Ask anything. Every answer sounds human.
+            <small>Try: "Explain how machine learning works" or "Should I learn Python or JavaScript first?"</small>
+          </div>
+        </div>
+        <div class="typing-wrap" id="typingWrap">
+          <div class="typing-indicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+        <div class="chat-compose">
+          <textarea class="chat-input" id="questionInput" placeholder="Ask anything... (Shift+Enter for new line)" rows="1"></textarea>
+          <button class="btn-send" id="answerBtn" onclick="answer()">Send ↵</button>
+        </div>
+      </div>
+
+      <div class="chat-toolbar">
+        <button class="btn-g" onclick="clearConversation()">Clear chat</button>
+        <button class="btn-g" onclick="copyLastAnswer()">Copy last answer</button>
+      </div>
+    </div>
+
+    <!-- ── Worksheet mode ──────────────────────────────────────── -->
+    <div id="answerModeWorksheet" class="answer-mode">
+      <div class="field">
+        <div class="flabel">Worksheet questions</div>
+        <div class="fhint">Paste one question per line. You can number them like "1) ..."</div>
+        <textarea class="q-input" id="worksheetInput" placeholder="1) What is globalization?&#10;2) Is AI helping education?&#10;3) Should schools ban phones?"></textarea>
+      </div>
+
+      <div class="controls">
+        <button class="btn-p" id="worksheetBtn" onclick="answerWorksheet()">Answer worksheet →</button>
+        <button class="btn-g" onclick="copyOut('answerOutput')">Copy answers</button>
+      </div>
+
+      <div class="answer-box" id="answerBox">
+        <div class="ehead"><span class="elabel">Worksheet answers</span><span class="ewc" id="answerWC">0 words</span></div>
+        <div class="answer-out answer-placeholder" id="answerOutput">Answers appear here...</div>
+      </div>
+    </div>
+
+    <div class="prog-track" id="answerProg"><div class="prog-fill" id="answerProgFill"></div></div>
+    <div class="log-panel" id="answerLog"></div>
+    <div class="status" id="answerStatus"><div class="s-dot"></div><span id="answerStatusMsg">Ready</span></div>
+
+    <div class="score-row" id="answerScoreRow" style="display:none">
+      <div class="scard"><div class="sc-l">AI words</div><div class="sc-v" id="aWords">—</div></div>
+      <div class="scard"><div class="sc-l">AI openers</div><div class="sc-v" id="aOpeners">—</div></div>
+      <div class="scard"><div class="sc-l">Burstiness</div><div class="sc-v" id="aBurst">—</div></div>
+      <div class="scard"><div class="sc-l">Words</div><div class="sc-v" id="aWC">—</div></div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       HUMANIZE TAB — paste AI text, get human text
+  ════════════════════════════════════════════════════════════════ -->
   <div id="tab-main" class="panel">
+    <div style="font-size:.83rem;color:#555580;line-height:1.65;max-width:560px">
+      Paste AI-generated text. Get it back rewritten to sound human — different enough to pass AI detectors, same meaning.
+    </div>
+
     <div class="steps">
-      <div class="step active" id="step1"><div class="sdot">1</div><span>Analyze</span></div>
+      <div class="step active" id="step1"><div class="sdot">1</div><span>Rewrite</span></div>
       <div class="sline"></div>
-      <div class="step" id="step2"><div class="sdot">2</div><span>Rewrite</span></div>
+      <div class="step" id="step2"><div class="sdot">2</div><span>Quality check</span></div>
       <div class="sline"></div>
-      <div class="step" id="step3"><div class="sdot">3</div><span>Fix #1</span></div>
+      <div class="step" id="step3"><div class="sdot">3</div><span>Length fix</span></div>
       <div class="sline"></div>
-      <div class="step" id="step4"><div class="sdot">4</div><span>Fix #2</span></div>
+      <div class="step" id="step4"><div class="sdot">4</div><span>Rhythm fix</span></div>
       <div class="sline"></div>
-      <div class="step" id="step5"><div class="sdot">5</div><span>Fix #3</span></div>
-      <div class="sline"></div>
-      <div class="step" id="step6"><div class="sdot">6</div><span>Finalize</span></div>
+      <div class="step" id="step5"><div class="sdot">5</div><span>Done</span></div>
     </div>
 
     <div class="egrid">
@@ -239,7 +362,7 @@ select:focus{border-color:var(--accent)}
       </div>
       <div class="ecol">
         <div class="ehead"><span class="elabel">Humanized output</span><span class="ewc" id="outWC">0 words</span></div>
-        <textarea id="outputText" readonly placeholder="Your rewritten text appears here..."></textarea>
+        <textarea id="outputText" readonly placeholder="Humanized text appears here..."></textarea>
       </div>
     </div>
 
@@ -247,7 +370,7 @@ select:focus{border-color:var(--accent)}
       <div class="scard"><div class="sc-l">Burstiness</div><div class="sc-v" id="sBurst">—</div></div>
       <div class="scard"><div class="sc-l">AI words</div><div class="sc-v" id="sWords">—</div></div>
       <div class="scard"><div class="sc-l">AI openers</div><div class="sc-v" id="sOpeners">—</div></div>
-      <div class="scard"><div class="sc-l">Fragments</div><div class="sc-v" id="sFrags">—</div></div>
+      <div class="scard"><div class="sc-l">Short sentences</div><div class="sc-v" id="sFrags">—</div></div>
       <div class="scard"><div class="sc-l">Length</div><div class="sc-v" id="sLen">—</div></div>
     </div>
 
@@ -273,62 +396,11 @@ select:focus{border-color:var(--accent)}
     </div>
   </div>
 
-  <!-- ANSWER AS HUMAN TAB -->
-  <div id="tab-answer" class="panel active">
-    <div style="font-size:0.83rem;color:#555580;line-height:1.65;max-width:620px">
-      Type a question and get an answer written in human voice — direct, personal, confident. Not AI balanced. Not hedged. A real human answer.
-    </div>
-
-    <div class="meth-grid" style="margin-bottom:4px">
-      <button class="meth-btn active" id="answerModeSingleBtn" onclick="switchAnswerMode('single',this)">💬 Single answer</button>
-      <button class="meth-btn" id="answerModeWorksheetBtn" onclick="switchAnswerMode('worksheet',this)">📝 Worksheet mode</button>
-    </div>
-
-    <div class="field answer-mode answer-mode-single active" id="answerModeSingle">
-      <div class="flabel">Your question</div>
-      <textarea class="q-input" id="questionInput" placeholder="e.g. Should the US focus more on domestic strength than foreign intervention?"></textarea>
-    </div>
-
-    <div class="field answer-mode answer-mode-worksheet" id="answerModeWorksheet">
-      <div class="flabel">Worksheet questions</div>
-      <div class="fhint">Paste one question per line. You can also number them like "1) ...".</div>
-      <textarea class="q-input" id="worksheetInput" placeholder="1) What is globalization?&#10;2) Is AI helping education?&#10;3) Should schools ban phones?"></textarea>
-    </div>
-
-    <div class="controls">
-      <button class="btn-p" id="answerBtn" onclick="answer()">Answer as Human →</button>
-      <button class="btn-p" id="worksheetBtn" onclick="answerWorksheet()" style="display:none">Answer worksheet →</button>
-      <button class="btn-g" onclick="copyOut('answerOutput')">Copy answer</button>
-      <button class="btn-g" onclick="clearConversation()">Clear thread</button>
-    </div>
-
-    <div class="prog-track" id="answerProg"><div class="prog-fill" id="answerProgFill"></div></div>
-    <div class="log-panel" id="answerLog"></div>
-    <div class="status" id="answerStatus"><div class="s-dot"></div><span id="answerStatusMsg">Ready</span></div>
-
-    <div class="answer-box" id="answerBox">
-      <div class="ehead"><span class="elabel">Answer</span><span class="ewc" id="answerWC">0 words</span></div>
-      <div class="answer-out answer-placeholder" id="answerOutput">Your answer appears here...</div>
-    </div>
-
-    <div class="field">
-      <div class="flabel">Conversation thread</div>
-      <div class="thread" id="conversationThread">
-        <div class="thread-text">No conversation yet. Ask a question to start.</div>
-      </div>
-    </div>
-
-    <div class="score-row" id="answerScoreRow" style="display:none">
-      <div class="scard"><div class="sc-l">AI words found</div><div class="sc-v" id="aWords">—</div></div>
-      <div class="scard"><div class="sc-l">AI openers</div><div class="sc-v" id="aOpeners">—</div></div>
-      <div class="scard"><div class="sc-l">Burstiness</div><div class="sc-v" id="aBurst">—</div></div>
-      <div class="scard"><div class="sc-l">Word count</div><div class="sc-v" id="aWC">—</div></div>
-    </div>
-  </div>
-
-  <!-- STYLE TAB -->
+  <!-- ════════════════════════════════════════════════════════════
+       MY VOICE TAB
+  ════════════════════════════════════════════════════════════════ -->
   <div id="tab-style" class="panel">
-    <p class="style-desc">Optionally add extra style notes on top of the built-in voice training. The pipeline already knows your core writing patterns from the dataset — use this to add personal quirks or topic-specific notes.</p>
+    <p class="style-desc">Add your personal writing style on top of the built-in human voice. The pipeline already uses real human examples — use this to add your own quirks.</p>
     <div class="meth-grid">
       <button class="meth-btn active" onclick="switchMethod('sample',this)">📋 Paste writing sample</button>
       <button class="meth-btn" onclick="switchMethod('quiz',this)">✏️ Quick quiz</button>
@@ -370,32 +442,36 @@ select:focus{border-color:var(--accent)}
 
     <div class="style-bar">
       <div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:0.55rem;text-transform:uppercase;letter-spacing:0.1em;color:#555580;margin-bottom:4px">Active profile</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:#555580;margin-bottom:4px">Active profile</div>
         <div class="sbadge" id="styleBadge">No extra style saved</div>
       </div>
       <button class="btn-clear" onclick="clearStyle()">✕ Clear</button>
     </div>
   </div>
 
-  <!-- TIPS TAB -->
+  <!-- ════════════════════════════════════════════════════════════
+       TIPS TAB
+  ════════════════════════════════════════════════════════════════ -->
   <div id="tab-tips" class="panel">
     <div class="tips-grid">
-      <div class="tip"><div class="tip-n">01</div><h3>Full human writing, not AI paraphrasing</h3><p>Most humanizers just shuffle AI sentences around. We don't paraphrase AI — we rewrite it from scratch using patterns from real human writing. The output is human writing, not AI writing with synonyms swapped.</p></div>
-      <div class="tip"><div class="tip-n">02</div><h3>Human answers, not AI answers</h3><p>Other tools humanize text you already wrote. We also answer questions from scratch in a real human voice — direct, opinionated, personal. No other tool does this.</p></div>
-      <div class="tip"><div class="tip-n">03</div><h3>Better, cheaper, more reliable</h3><p>We use Mistral's API — faster and cheaper than GPT-4 or Claude. You bring your own key so you pay at cost, not at markup. No subscription gouging for what should be a simple tool.</p></div>
-      <div class="tip"><div class="tip-n">04</div><h3>The iterative fix loop</h3><p>Rewrite → 3 rounds of targeted fixes. Each round detects what's still AI (long sentences, hedging, dramatic phrases, Claude qualifiers) and fixes only those things. Not one pass and done.</p></div>
-      <div class="tip"><div class="tip-n">05</div><h3>Make 2–3 edits yourself</h3><p>Change a couple sentences to exactly how you'd write them. No AI can replicate that. It's the single biggest improvement you can make to any output.</p></div>
-      <div class="tip"><div class="tip-n">06</div><h3>Running the server</h3><p>Open terminal in the project folder and run: <code style="background:var(--s3);padding:1px 5px;border-radius:3px;font-size:0.75rem">npm start</code></p></div>
+      <div class="tip"><div class="tip-n">01</div><h3>Use it like ChatGPT</h3><p>The Chat tab works like a normal AI assistant. Ask it anything — questions, code, opinions, essays. The difference is every answer sounds like a real person wrote it, not an AI.</p></div>
+      <div class="tip"><div class="tip-n">02</div><h3>Human writing, not AI paraphrasing</h3><p>The Humanize tab doesn't just swap synonyms — it rewrites from scratch using patterns from real human writing. Plus a quality gate that runs a second cleanup pass if the first rewrite still has AI patterns.</p></div>
+      <div class="tip"><div class="tip-n">03</div><h3>Your own Mistral key</h3><p>You bring your own Mistral API key so you pay at cost, not markup. Mistral Large is fast and cheaper than GPT-4. Get your key at console.mistral.ai.</p></div>
+      <div class="tip"><div class="tip-n">04</div><h3>The quality gate</h3><p>After the first rewrite, the pipeline scores the output for AI patterns. If it finds banned words, AI openers, or hedging phrases, it runs a targeted cleanup pass. This is what makes it reliable.</p></div>
+      <div class="tip"><div class="tip-n">05</div><h3>Make 2–3 edits yourself</h3><p>The single biggest upgrade: change a few sentences to exactly how you'd write them. No AI can replicate that. It's what separates passable from undetectable.</p></div>
+      <div class="tip"><div class="tip-n">06</div><h3>Running the server</h3><p>Open terminal in the project folder and run: <code style="background:var(--s3);padding:1px 5px;border-radius:3px;font-size:.75rem">npm start</code></p></div>
     </div>
   </div>
 </div>
 
-<!-- UPGRADE MODAL -->
+<!-- ═══════════════════════════════════════════════════════════════
+     UPGRADE MODAL
+═══════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="upgradeModal">
   <div class="modal" style="position:relative">
     <button class="modal-close" onclick="hideUpgradeModal()">&times;</button>
     <h2>Upgrade Your Plan</h2>
-    <div class="modal-sub">Choose a plan that fits your usage. The AI that gives human answers — full human writing, not AI paraphrasing.</div>
+    <div class="modal-sub">Chat with AI that sounds human. Humanize any text. Full access to every feature.</div>
     <div class="plan-grid">
       <div class="plan-card" id="plan-free">
         <div class="plan-name">Free</div>
@@ -422,7 +498,7 @@ select:focus{border-color:var(--accent)}
         <button class="btn-plan" onclick="upgradePlan('unlimited')">Upgrade</button>
       </div>
     </div>
-    <div class="modal-beta">Payment integration coming soon — upgrading now is free during beta.</div>
+    <div class="modal-beta">Payment integration coming soon — upgrading is free during beta.</div>
   </div>
 </div>
 
@@ -432,9 +508,25 @@ let styleProfile = null;
 let sessionToken = localStorage.getItem('humanizer_token') || null;
 let currentPlan = 'free';
 let answerMode = 'single';
-const answerHistory = [];
+const answerHistory = [];  // [{role:'user'|'assistant', content:'...'}]
+let lastAnswerText = '';
 
 const wc = t => t.trim() ? t.trim().split(/\s+/).length : 0;
+
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Format code blocks in AI responses
+function formatAiContent(text) {
+  // Detect and wrap markdown code blocks
+  const escaped = escHtml(text);
+  return escaped
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre><code>${code.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')}</code></pre>`)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>');
+}
 
 document.getElementById('inputText').addEventListener('input', () => {
   document.getElementById('inWC').textContent = wc(document.getElementById('inputText').value) + ' words';
@@ -462,7 +554,6 @@ function updateUsageBadge(usesLeft, plan) {
   if (usesLeft === -1) {
     badge.textContent = `Unlimited (${planLabel})`;
   } else {
-    const planMax = { free: 2, basic: 20, pro: 50 }[plan] || '?';
     badge.textContent = `${usesLeft} uses left (${planLabel})`;
   }
   currentPlan = plan;
@@ -486,12 +577,11 @@ function updatePlanCards(activePlan) {
   });
 }
 
-function showUpgradeModal() {
-  document.getElementById('upgradeModal').classList.add('show');
-}
-function hideUpgradeModal() {
-  document.getElementById('upgradeModal').classList.remove('show');
-}
+function showUpgradeModal() { document.getElementById('upgradeModal').classList.add('show'); }
+function hideUpgradeModal() { document.getElementById('upgradeModal').classList.remove('show'); }
+document.getElementById('upgradeModal').addEventListener('click', function(e) {
+  if (e.target === this) hideUpgradeModal();
+});
 
 async function upgradePlan(plan) {
   if (plan === currentPlan) return;
@@ -510,14 +600,8 @@ async function upgradePlan(plan) {
   }
 }
 
-// Close modal on overlay click
-document.getElementById('upgradeModal').addEventListener('click', function(e) {
-  if (e.target === this) hideUpgradeModal();
-});
-
-// Init session on load
+// Init on load
 initSession();
-renderConversation();
 
 // ─── Tab / Method switching ──────────────────────────────────────────────────
 function switchTab(name, btn) {
@@ -538,18 +622,9 @@ function switchAnswerMode(mode, btn) {
   document.querySelectorAll('#answerModeSingleBtn,#answerModeWorksheetBtn').forEach(b => b.classList.remove('active'));
   document.getElementById(mode === 'single' ? 'answerModeSingle' : 'answerModeWorksheet').classList.add('active');
   btn.classList.add('active');
-  document.getElementById('answerBtn').style.display = mode === 'single' ? '' : 'none';
-  document.getElementById('worksheetBtn').style.display = mode === 'worksheet' ? '' : 'none';
-  document.getElementById('answerOutput').textContent = mode === 'worksheet' ? 'Worksheet answers appear here...' : 'Your answer appears here...';
-  document.getElementById('answerOutput').classList.add('answer-placeholder');
-  renderConversation();
 }
 
-function clearConversation() {
-  answerHistory.length = 0;
-  renderConversation();
-  setStatus('answerStatus', 'Conversation cleared.', 'ok');
-}
+// ─── Status / Progress helpers ───────────────────────────────────────────────
 function setStatus(id, msg, type='') {
   document.getElementById(id + 'Msg').textContent = msg;
   document.getElementById(id).className = 'status ' + type;
@@ -563,26 +638,14 @@ function setStep(n) {
     else if (i === n) el.classList.add('active');
   }
 }
-const stepForMsg = msg => { const m = msg.match(/^(\d)\/6/); return m ? parseInt(m[1]) : null; };
-const progForStep = n => [0, 12, 28, 45, 62, 78, 95][n] || 0;
-
-function renderConversation() {
-  const el = document.getElementById('conversationThread');
-  if (!el) return;
-  if (!answerHistory.length) {
-    el.innerHTML = '<div class="thread-text">No conversation yet. Ask a question to start.</div>';
-    return;
-  }
-
-  const rows = answerHistory.slice(-12).map(m => {
-    const role = m.role === 'user' ? 'You' : 'Assistant';
-    const safe = (m.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return `<div class="thread-item ${m.role}"><div class="thread-role">${role}</div><div class="thread-text">${safe}</div></div>`;
-  });
-  el.innerHTML = rows.join('');
-  el.scrollTop = el.scrollHeight;
+const progForStep = n => [0, 12, 40, 65, 82, 95][n] || 0;
+function setProg(id, pct) { document.getElementById(id).style.width = pct + '%'; }
+function showProg(id) { document.getElementById(id).classList.add('on'); }
+function hideProg(id) {
+  setProg(id + 'Fill', 100);
+  setTimeout(() => { document.getElementById(id).classList.remove('on'); setProg(id + 'Fill', 0); }, 600);
 }
-
+function sc(id, val, cls) { const e = document.getElementById(id); if(e){e.textContent=val;e.className='sc-v '+cls;} }
 function addLog(panelId, msg, state='active') {
   const panel = document.getElementById(panelId);
   panel.classList.add('show');
@@ -590,20 +653,291 @@ function addLog(panelId, msg, state='active') {
   const text = msg.replace(/\[\d\/\d\]\s*/, '');
   const div = document.createElement('div');
   div.className = 'log-line ' + state;
-  div.innerHTML = step ? `<span class="log-step">[${step}]</span><span>${text}</span>` : `<span>${text}</span>`;
+  div.innerHTML = step ? `<span class="log-step">[${step}]</span><span>${escHtml(text)}</span>` : `<span>${escHtml(text)}</span>`;
   panel.appendChild(div);
   panel.scrollTop = panel.scrollHeight;
 }
 
-function setProg(id, pct) { document.getElementById(id).style.width = pct + '%'; }
-function showProg(id) { document.getElementById(id).classList.add('on'); }
-function hideProg(id) {
-  setProg(id + 'Fill', 100);
-  setTimeout(() => { document.getElementById(id).classList.remove('on'); setProg(id + 'Fill', 0); }, 600);
-}
-function sc(id, val, cls) { const e = document.getElementById(id); if(e){e.textContent = val; e.className = 'sc-v ' + cls;} }
+// ─── Chat helpers ────────────────────────────────────────────────────────────
+function addChatMessage(role, content) {
+  const container = document.getElementById('chatMessages');
+  // Remove empty state
+  const empty = container.querySelector('.chat-empty');
+  if (empty) empty.remove();
 
-// ─── HUMANIZE ─────────────────────────────────────────────────────────────────
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+
+  if (role === 'user') {
+    div.innerHTML = `<div class="msg-bubble">${escHtml(content).replace(/\n/g,'<br>')}</div>`;
+  } else {
+    lastAnswerText = content;
+    div.innerHTML = `
+      <div class="msg-bubble">${formatAiContent(content)}</div>
+      <div class="msg-footer">
+        <span class="human-badge">✓ Human</span>
+        <button class="msg-copy-btn" onclick="copyMsgBubble(this)">Copy</button>
+      </div>`;
+  }
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function copyMsgBubble(btn) {
+  // Get the raw text from the bubble (strip HTML tags)
+  const bubble = btn.closest('.msg').querySelector('.msg-bubble');
+  if (!bubble) return;
+  const text = bubble.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+function copyLastAnswer() {
+  if (!lastAnswerText) return setStatus('answerStatus', 'No answer yet.', 'err');
+  navigator.clipboard.writeText(lastAnswerText).then(() => {
+    setStatus('answerStatus', 'Copied!', 'ok');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = lastAnswerText;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    setStatus('answerStatus', 'Copied!', 'ok');
+  });
+}
+
+function showTypingIndicator() {
+  document.getElementById('typingWrap').classList.add('show');
+  const c = document.getElementById('chatMessages');
+  if (c) c.scrollTop = c.scrollHeight;
+}
+function hideTypingIndicator() {
+  document.getElementById('typingWrap').classList.remove('show');
+}
+
+function clearConversation() {
+  answerHistory.length = 0;
+  lastAnswerText = '';
+  const msgs = document.getElementById('chatMessages');
+  if (msgs) {
+    msgs.innerHTML = '<div class="chat-empty">Ask anything. Every answer sounds human.<small>Try: "Explain how machine learning works" or "Should I learn Python or JavaScript first?"</small></div>';
+  }
+  setStatus('answerStatus', 'Chat cleared.', 'ok');
+  document.getElementById('answerScoreRow').style.display = 'none';
+}
+
+// Auto-resize chat input
+function autoResizeInput(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 130) + 'px';
+}
+const chatInput = document.getElementById('questionInput');
+if (chatInput) {
+  chatInput.addEventListener('input', function() { autoResizeInput(this); });
+  chatInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (answerMode === 'single') answer();
+    }
+  });
+}
+
+// ─── CHAT / ANSWER AS HUMAN ──────────────────────────────────────────────────
+async function answer() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const question = document.getElementById('questionInput').value.trim();
+  const btn = document.getElementById('answerBtn');
+
+  if (!apiKey) return setStatus('answerStatus', 'Enter your Mistral API key.', 'err');
+  if (!question) return setStatus('answerStatus', 'Type a message first.', 'err');
+
+  // Add user message to chat
+  addChatMessage('user', question);
+  answerHistory.push({ role: 'user', content: question });
+  document.getElementById('questionInput').value = '';
+  autoResizeInput(document.getElementById('questionInput'));
+
+  btn.disabled = true;
+  showTypingIndicator();
+  showProg('answerProg'); setProg('answerProgFill', 10);
+  document.getElementById('answerLog').innerHTML = '';
+  document.getElementById('answerLog').classList.remove('show');
+  setStatus('answerStatus', 'Generating...', 'working');
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (sessionToken) headers['X-Session-Token'] = sessionToken;
+
+    const response = await fetch('/answer', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        apiKey,
+        question,
+        styleProfile,
+        history: answerHistory.slice(0, -1)  // don't include the message we just pushed
+      })
+    });
+
+    if (response.status === 402) {
+      hideTypingIndicator();
+      hideProg('answerProg');
+      setStatus('answerStatus', 'Out of uses — upgrade your plan.', 'err');
+      answerHistory.pop();  // remove the user message we just added
+      btn.disabled = false;
+      showUpgradeModal();
+      return;
+    }
+    if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Server error'); }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let event;
+        try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (event.type === 'progress') {
+          addLog('answerLog', `[${event.step}] ${event.msg}`);
+          setProg('answerProgFill', event.step === '1/2' ? 50 : 85);
+
+        } else if (event.type === 'result') {
+          hideTypingIndicator();
+          addChatMessage('ai', event.text);
+          answerHistory.push({ role: 'assistant', content: event.text });
+          if (answerHistory.length > 24) answerHistory.splice(0, 2);
+
+          const s = event.scores;
+          sc('aWords', s.bannedWordsFound.length === 0 ? '✓ clean' : s.bannedWordsFound.length + ' found', s.bannedWordsFound.length === 0 ? 'g' : 'b');
+          sc('aOpeners', s.aiOpenersFound === 0 ? '✓ none' : s.aiOpenersFound + ' found', s.aiOpenersFound === 0 ? 'g' : 'b');
+          sc('aBurst', s.burstiness >= 0.4 ? '✓ ' + s.burstiness : '~ ' + s.burstiness, s.burstiness >= 0.4 ? 'g' : 'm');
+          sc('aWC', s.wordCount + ' words', 'g');
+          document.getElementById('answerScoreRow').style.display = 'flex';
+
+          if (event.usesLeft !== undefined) updateUsageBadge(event.usesLeft, currentPlan);
+          hideProg('answerProg');
+          setStatus('answerStatus', 'Done.', 'ok');
+
+        } else if (event.type === 'error') {
+          throw new Error(event.message);
+        }
+      }
+    }
+  } catch (err) {
+    hideTypingIndicator();
+    hideProg('answerProg');
+    setStatus('answerStatus', 'Error: ' + err.message, 'err');
+    addChatMessage('ai', 'Error: ' + err.message);
+  }
+  btn.disabled = false;
+}
+
+// ─── WORKSHEET ───────────────────────────────────────────────────────────────
+function parseWorksheetQuestions(raw) {
+  return raw.split('\n')
+    .map(line => line.trim())
+    .map(line => line.replace(/^\d+\s*[\.)\-]\s*/, '').trim())
+    .filter(Boolean);
+}
+
+async function answerWorksheet() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const raw = document.getElementById('worksheetInput').value.trim();
+  const btn = document.getElementById('worksheetBtn');
+  const outEl = document.getElementById('answerOutput');
+
+  if (!apiKey) return setStatus('answerStatus', 'Enter your Mistral API key.', 'err');
+  const questions = parseWorksheetQuestions(raw);
+  if (!questions.length) return setStatus('answerStatus', 'Paste at least one worksheet question.', 'err');
+
+  btn.disabled = true;
+  document.getElementById('answerLog').innerHTML = '';
+  document.getElementById('answerLog').classList.remove('show');
+  document.getElementById('answerScoreRow').style.display = 'none';
+  outEl.textContent = 'Generating worksheet answers...';
+  outEl.classList.add('answer-placeholder');
+  showProg('answerProg'); setProg('answerProgFill', 8);
+  setStatus('answerStatus', `Answering ${questions.length} questions...`, 'working');
+
+  try {
+    const answers = [];
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      addLog('answerLog', `[${i + 1}/${questions.length}] ${q}`);
+      setProg('answerProgFill', Math.min(95, 8 + Math.round(((i + 1) / questions.length) * 82)));
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (sessionToken) headers['X-Session-Token'] = sessionToken;
+      const response = await fetch('/answer', {
+        method: 'POST', headers,
+        body: JSON.stringify({ apiKey, question: q, styleProfile, history: [] })
+      });
+
+      if (response.status === 402) throw new Error('Out of uses — upgrade your plan.');
+      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Server error'); }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let answerText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let event;
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+          if (event.type === 'result') { answerText = event.text; if (event.usesLeft !== undefined) updateUsageBadge(event.usesLeft, currentPlan); }
+          if (event.type === 'error') throw new Error(event.message);
+        }
+      }
+      answers.push(`${i + 1}. ${q}\n${answerText}`);
+    }
+
+    const combined = answers.join('\n\n');
+    outEl.textContent = combined;
+    outEl.classList.remove('answer-placeholder');
+    document.getElementById('answerWC').textContent = wc(combined) + ' words';
+    hideProg('answerProg');
+    setStatus('answerStatus', `Done — ${questions.length} answers generated.`, 'ok');
+    addLog('answerLog', 'Complete ✓', 'done');
+  } catch (err) {
+    hideProg('answerProg');
+    setStatus('answerStatus', 'Error: ' + err.message, 'err');
+    outEl.textContent = '';
+    outEl.classList.remove('answer-placeholder');
+  }
+  btn.disabled = false;
+}
+
+// ─── HUMANIZE ────────────────────────────────────────────────────────────────
 async function run() {
   const apiKey = document.getElementById('apiKey').value.trim();
   const inputText = document.getElementById('inputText').value.trim();
@@ -661,8 +995,9 @@ async function run() {
 
         if (event.type === 'progress') {
           addLog('logPanel', `[${event.step}] ${event.msg}`);
-          const stepNum = stepForMsg(event.step);
-          if (stepNum) { setStep(stepNum); setProg('progFill', progForStep(stepNum)); }
+          if (event.step === '1/3') { setStep(1); setProg('progFill', 12); }
+          else if (event.step === '2/3') { setStep(2); setProg('progFill', 50); }
+          else if (event.step === '3/3') { setStep(3); setProg('progFill', 82); }
 
         } else if (event.type === 'result') {
           document.getElementById('outputText').value = event.text;
@@ -677,21 +1012,17 @@ async function run() {
           sc('sOpeners', s.aiOpenersFound === 0 ? '✓ none' : s.aiOpenersFound + ' found', s.aiOpenersFound === 0 ? 'g' : s.aiOpenersFound <= 1 ? 'm' : 'b');
           sc('sFrags', s.fragments >= 3 ? '✓ ' + s.fragments : s.fragments >= 1 ? '~ ' + s.fragments : '✗ 0', s.fragments >= 3 ? 'g' : s.fragments >= 1 ? 'm' : 'b');
           sc('sLen', diff < 0.06 ? '✓ matched' : diff < 0.14 ? '~ close' : '✗ off', diff < 0.06 ? 'g' : diff < 0.14 ? 'm' : 'b');
-
           document.getElementById('scoreRow').style.display = 'flex';
+
           if (s.humanExampleSources?.length) {
             document.getElementById('exContent').innerHTML =
               `<div class="ex-item"><span class="ex-tag">sources</span>${s.humanExampleSources.join(', ')}</div>
-               <div class="ex-item"><span class="ex-tag">count</span>${s.examplesUsed} human examples in dataset</div>`;
+               <div class="ex-item"><span class="ex-tag">examples</span>${s.examplesUsed} human writing examples in dataset</div>`;
             document.getElementById('exPanel').className = 'ex-panel show';
           }
 
-          // Update usage badge if server sent usesLeft
-          if (event.usesLeft !== undefined) {
-            updateUsageBadge(event.usesLeft, currentPlan);
-          }
-
-          setStep(7); hideProg('prog');
+          if (event.usesLeft !== undefined) updateUsageBadge(event.usesLeft, currentPlan);
+          setStep(5); hideProg('prog');
           setStatus('statusEl', 'Done — make 1–2 of your own edits for best results.', 'ok');
           addLog('logPanel', 'Complete ✓', 'done');
 
@@ -708,210 +1039,31 @@ async function run() {
   btn.disabled = false;
 }
 
-// ─── ANSWER AS HUMAN ──────────────────────────────────────────────────────────
-async function answer() {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  const question = document.getElementById('questionInput').value.trim();
-  const btn = document.getElementById('answerBtn');
-
-  if (!apiKey) return setStatus('answerStatus', 'Enter your Mistral API key.', 'err');
-  if (!question) return setStatus('answerStatus', 'Enter a question first.', 'err');
-
-  btn.disabled = true;
-  document.getElementById('answerLog').innerHTML = '';
-  document.getElementById('answerLog').classList.remove('show');
-  document.getElementById('answerScoreRow').style.display = 'none';
-
-  const outEl = document.getElementById('answerOutput');
-  outEl.textContent = 'Generating...';
-  outEl.classList.add('answer-placeholder');
-
-  showProg('answerProg'); setProg('answerProgFill', 10);
-  setStatus('answerStatus', 'Writing your answer...', 'working');
-
-  try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (sessionToken) headers['X-Session-Token'] = sessionToken;
-
-    const response = await fetch('/answer', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ apiKey, question, styleProfile, history: answerHistory })
-    });
-
-    if (response.status === 402) {
-      hideProg('answerProg');
-      setStatus('answerStatus', 'Out of uses — upgrade your plan.', 'err');
-      outEl.textContent = '';
-      outEl.classList.remove('answer-placeholder');
-      showUpgradeModal();
-      btn.disabled = false;
-      return;
-    }
-    if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Server error'); }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        let event;
-        try { event = JSON.parse(line.slice(6)); } catch { continue; }
-
-        if (event.type === 'progress') {
-          addLog('answerLog', `[${event.step}] ${event.msg}`);
-          setProg('answerProgFill', event.step === '1/3' ? 30 : event.step === '2/3' ? 65 : 90);
-
-        } else if (event.type === 'result') {
-          outEl.textContent = event.text;
-          outEl.classList.remove('answer-placeholder');
-          answerHistory.push({ role: 'user', content: question });
-          answerHistory.push({ role: 'assistant', content: event.text });
-          if (answerHistory.length > 20) answerHistory.splice(0, answerHistory.length - 20);
-          renderConversation();
-          document.getElementById('answerWC').textContent = wc(event.text) + ' words';
-          const s = event.scores;
-          sc('aWords', s.bannedWordsFound.length === 0 ? '✓ clean' : s.bannedWordsFound.length + ' found', s.bannedWordsFound.length === 0 ? 'g' : 'b');
-          sc('aOpeners', s.aiOpenersFound === 0 ? '✓ none' : s.aiOpenersFound + ' found', s.aiOpenersFound === 0 ? 'g' : 'b');
-          sc('aBurst', s.burstiness >= 0.4 ? '✓ ' + s.burstiness : '~ ' + s.burstiness, s.burstiness >= 0.4 ? 'g' : 'm');
-          sc('aWC', s.wordCount + ' words', 'g');
-          document.getElementById('answerScoreRow').style.display = 'flex';
-
-          if (event.usesLeft !== undefined) {
-            updateUsageBadge(event.usesLeft, currentPlan);
-          }
-
-          hideProg('answerProg');
-          setStatus('answerStatus', 'Done.', 'ok');
-          addLog('answerLog', 'Complete ✓', 'done');
-
-        } else if (event.type === 'error') {
-          throw new Error(event.message);
-        }
-      }
-    }
-  } catch (err) {
-    hideProg('answerProg');
-    setStatus('answerStatus', 'Error: ' + err.message, 'err');
-    outEl.textContent = 'Error — see status above.';
-  }
-  btn.disabled = false;
+// ─── Copy helper ─────────────────────────────────────────────────────────────
+function copyOut(elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const text = el.value || el.textContent || '';
+  navigator.clipboard.writeText(text).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
 }
 
-function parseWorksheetQuestions(raw) {
-  return raw.split('\n')
-    .map(line => line.trim())
-    .map(line => line.replace(/^\d+\s*[\.)-]\s*/, '').trim())
-    .filter(Boolean);
-}
-
-async function answerWorksheet() {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  const raw = document.getElementById('worksheetInput').value.trim();
-  const btn = document.getElementById('worksheetBtn');
-  const outEl = document.getElementById('answerOutput');
-
-  if (!apiKey) return setStatus('answerStatus', 'Enter your Mistral API key.', 'err');
-  const questions = parseWorksheetQuestions(raw);
-  if (!questions.length) return setStatus('answerStatus', 'Paste at least one worksheet question.', 'err');
-
-  btn.disabled = true;
-  document.getElementById('answerLog').innerHTML = '';
-  document.getElementById('answerLog').classList.remove('show');
-  document.getElementById('answerScoreRow').style.display = 'none';
-  outEl.textContent = 'Generating worksheet answers...';
-  outEl.classList.add('answer-placeholder');
-  showProg('answerProg'); setProg('answerProgFill', 8);
-  setStatus('answerStatus', `Answering ${questions.length} questions...`, 'working');
-
-  try {
-    const answers = [];
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      addLog('answerLog', `[${i + 1}/${questions.length}] ${q}`);
-      setProg('answerProgFill', Math.min(95, 8 + Math.round(((i + 1) / questions.length) * 82)));
-
-      const headers = { 'Content-Type': 'application/json' };
-      if (sessionToken) headers['X-Session-Token'] = sessionToken;
-      const response = await fetch('/answer', {
-        method: 'POST', headers,
-        body: JSON.stringify({ apiKey, question: q, styleProfile, history: [] })
-      });
-
-      if (response.status === 402) throw new Error('Out of uses — upgrade your plan.');
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Server error');
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let finalText = '';
-      let finalUsesLeft;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          let event;
-          try { event = JSON.parse(line.slice(6)); } catch { continue; }
-          if (event.type === 'result') {
-            finalText = event.text || '';
-            finalUsesLeft = event.usesLeft;
-          }
-          if (event.type === 'error') throw new Error(event.message || 'Server error');
-        }
-      }
-
-      answers.push(`Q${i + 1}. ${q}\n${finalText}`);
-      if (finalUsesLeft !== undefined) updateUsageBadge(finalUsesLeft, currentPlan);
-    }
-
-    outEl.textContent = answers.join('\n\n');
-    outEl.classList.remove('answer-placeholder');
-    document.getElementById('answerWC').textContent = wc(outEl.textContent) + ' words';
-    hideProg('answerProg');
-    setStatus('answerStatus', 'Worksheet complete.', 'ok');
-    addLog('answerLog', 'Complete ✓', 'done');
-  } catch (err) {
-    hideProg('answerProg');
-    setStatus('answerStatus', 'Error: ' + err.message, 'err');
-    outEl.textContent = 'Error — see status above.';
-  }
-
-  btn.disabled = false;
-}
-
-// ─── COPY ─────────────────────────────────────────────────────────────────────
-function copyOut(id) {
-  const el = document.getElementById(id);
-  const text = el.tagName === 'TEXTAREA' ? el.value : el.textContent;
-  if (!text || text === 'Your answer appears here...') return setStatus('statusEl', 'Nothing to copy.', 'err');
-  navigator.clipboard.writeText(text);
-  setStatus('statusEl', 'Copied.', 'ok');
-  setTimeout(() => setStatus('statusEl', 'Ready'), 2000);
-}
-
-// ─── STYLE ────────────────────────────────────────────────────────────────────
+// ─── Style tab ───────────────────────────────────────────────────────────────
 async function saveFromSample() {
-  const sample = document.getElementById('styleSample').value.trim();
-  if (wc(sample) < 15) return alert('Paste at least a few sentences.');
   const apiKey = document.getElementById('apiKey').value.trim();
+  const sample = document.getElementById('styleSample').value.trim();
+  if (!apiKey) return alert('Enter your Mistral API key first.');
+  if (sample.split(/\s+/).length < 20) return alert('Paste at least 5 sentences (20+ words).');
+
   const btn = document.getElementById('saveSampleBtn');
-  btn.disabled = true; btn.textContent = 'Analyzing...';
-  updateBadge('Analyzing...');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing...';
   try {
     const res = await fetch('/extract-style', {
       method: 'POST',
@@ -920,27 +1072,31 @@ async function saveFromSample() {
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    styleProfile = { type: 'sample', examples: data.examples, summary: null };
-    updateBadge('✓ Style saved — ' + data.examples.length + ' examples');
+    styleProfile = { examples: data.examples, summary: 'custom sample' };
+    document.getElementById('styleBadge').textContent = `Sample style active (${data.examples.length} examples extracted)`;
+    document.getElementById('styleBadge').className = 'sbadge set';
   } catch (e) {
-    styleProfile = { type: 'raw', raw: sample, examples: null };
-    updateBadge('Sample saved');
+    alert('Error: ' + e.message);
   }
-  btn.disabled = false; btn.textContent = 'Analyze & Save →';
+  btn.disabled = false;
+  btn.textContent = 'Analyze & Save →';
 }
 
 function saveFromQuiz() {
-  const get = n => { const e = document.querySelector(`input[name="${n}"]:checked`); return e ? e.value : ''; };
+  const formality = document.querySelector('input[name="q1"]:checked')?.value || 'casual but clear';
+  const contractions = document.querySelector('input[name="q3"]:checked')?.value || 'usually use contractions';
   const extra = document.getElementById('qExtra').value.trim();
-  styleProfile = { type: 'quiz', summary: [get('q1'), get('q3'), extra].filter(Boolean).join(' | '), examples: null };
-  updateBadge('✓ Style saved from quiz');
+  const summary = [formality, contractions, extra].filter(Boolean).join('. ');
+  styleProfile = { examples: [], summary };
+  document.getElementById('styleBadge').textContent = `Quiz style: ${formality}`;
+  document.getElementById('styleBadge').className = 'sbadge set';
 }
 
-function clearStyle() { styleProfile = null; updateBadge(null); }
-function updateBadge(msg) {
-  const b = document.getElementById('styleBadge');
-  b.textContent = msg || 'No extra style saved';
-  b.className = 'sbadge' + (msg?.startsWith('✓') ? ' set' : '');
+function clearStyle() {
+  styleProfile = null;
+  document.getElementById('styleBadge').textContent = 'No extra style saved';
+  document.getElementById('styleBadge').className = 'sbadge';
+  document.getElementById('styleSample').value = '';
 }
 </script>
 </body>
